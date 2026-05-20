@@ -1,0 +1,1 @@
+export { PlantDetailPage } from './PlantDetailPage';

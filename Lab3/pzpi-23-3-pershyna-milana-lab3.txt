@@ -1,0 +1,506 @@
+МІНІСТЕРСТВО ОСВІТИ І НАУКИ УКРАЇНИ
+ 
+ХАРКІВСЬКИЙ НАЦІОНАЛЬНИЙ
+УНІВЕРСИТЕТ РАДІОЕЛЕКТРОНІКИ
+ 
+Кафедра «Програмна інженерія»
+ 
+ 
+
+
+ЗВІТ
+до лабораторної роботи 3
+з дисципліни «Архітектура програмного забезпечення»
+
+ 
+
+
+
+
+Виконав:                                               Перевірив:
+ст. гр. ПЗПІ-23-3                                      ст. викладач катедри ПІ
+Першина М. А.                                          Сокорчук Ігор Петрович
+
+
+
+
+
+
+
+Харків 2026
+
+
+1 ІСТОРІЯ ЗМІН
+№	Дата	Версія звіту	Опис змін та виправлень
+1	19.05.2026	0.1	Початок роботи над Vision & Scope
+2	20.05.2026	0.2	Доопрацювання звіту та відеозапису
+
+
+
+2 ЗАВДАННЯ
+Ознайомитися з процесом розробки front-end частини програмної системи з використанням сучасних бібліотек та архітектурних підходів. Отримати практичні навички реалізації веб-клієнта у складі розподіленої IoT-системи, що взаємодіє з серверною частиною через REST API.
+Розробити веб-застосунок Plant Care System на основі React.js, TypeScript, Material-UI та Redux як частину системи моніторингу та догляду за кімнатними рослинами. Застосунок повинен підтримувати роботу клієнтів у веб-режимі та забезпечувати адміністрування системи, тобто мати окремий інтерфейс для звичайних користувачів і окремий для адміністраторів. Обидва інтерфейси повинні підтримувати інтернаціоналізацію та локалізацію: українську та англійську мови, формат дати та часу відповідний регіону, порядок сортування текстових значень, різні напрями введення тексту.
+Адміністрування системи повинно забезпечувати: управління користувачами системи, управління даними системи (рослини, типи рослин, сенсори), створення резервних копій налаштувань та даних, експорт та імпорт даних та налаштувань.
+Звіт повинен містити: опис прийнятих інженерних рішень, опис взаємодії компонентів, UML-діаграму прецедентів (Use Case Diagram), UML-діаграму компонентів (Component Diagram), діаграму пакетів (Package Diagram) та діаграму діяльності (Activity Diagram).
+
+3. ОПИС ВИКОНАНОЇ РОБОТИ
+Розроблено повнофункціональний веб-застосунок Plant Care для моніторингу та догляду за кімнатними рослинами через IoT-датчики. Застосунок є веб-клієнтом системи Plant Care System і взаємодіє з серверним API на Node.js/Express/PostgreSQL. Реалізовано окремі інтерфейси для користувачів та адміністраторів, повна локалізація UA/EN, графіки Recharts для відображення даних сенсорів, PDF-звіти та резервне копіювання даних.
+3.1 Архітектура застосунку та технічний стек
+
+Застосунок побудований за принципами однонаправленого потоку даних з використанням Redux Toolkit та RTK Query для управління станом і кешування серверних даних. Кожна сторінка підписується на дані через auto-generated хуки RTK Query і ніколи не звертається до API безпосередньо. Шар API повністю відокремлений у папці src/api/.
+Технічний стек застосунку наведений у таблиці 3.1.
+
+Таблиця 3.1 – Технічний стек застосунку
+
+Бібліотека	Версія	Призначення
+React	18.3.1	UI-фреймворк, функціональні компоненти
+TypeScript	5.x	Статична типізація, strict mode
+Vite	5.x	Збірник, HMR, аліаси @/
+Material-UI (MUI)	v5.18.0	UI-компоненти, темна тема, overrides
+@mui/x-data-grid	6.20.4	Таблиці з пагінацією, сортуванням
+Redux Toolkit	2.12.0	Управління станом (auth, ui, settings)
+RTK Query	(в RTK)	Кешування запитів, auto-generated хуки
+react-router-dom	7.15.1	Маршрутизація з захищеними роутами
+Recharts	3.8.1	Графіки показань сенсорів (AreaChart)
+react-i18next + i18next	17.0.8	Локалізація UA/EN, 191 ключ
+date-fns	4.1.0	Форматування дат з урахуванням локалі
+react-hook-form + zod	7.76.0	Форми з декларативною валідацією
+@react-pdf/renderer	4.5.1	Генерація PDF з підтримкою кирилиці
+file-saver	2.0.5	Завантаження файлів (PDF, JSON backup)
+
+Структура вихідного коду: src/api (RTK Query endpoint-и), src/app (store, hooks), src/components (common, layout, plant, sensor, admin, pdf), src/pages (auth, user, admin), src/features (Redux slices), src/hooks (кастомні хуки), src/utils (хелпери), src/types, src/theme, src/i18n, src/routes.
+
+3.2 Опис сторінок застосунку
+
+Застосунок містить чотирнадцять сторінок, розділених на публічні, користувацькі та адміністративні:
+–	LoginPage / RegisterPage – публічні сторінки автентифікації з валідацією через zod та react-hook-form. Переключатель мови доступний без авторизації. Після логіна автоматичний редирект на /dashboard або /admin залежно від ролі.
+–	DashboardPage – головна після входу. Відображає 4 метрики (всього/норма/увага/критично), сітку карток рослин PlantCard з кольоровим StatusChip, BarChart активності сенсорів за тиждень, кнопку експорту в PDF.
+–	PlantsPage – список рослин з пошуком (useDebounce), фільтром за статусом та сортуванням з урахуванням локалі через localeCompare.
+–	PlantDetailPage – детальна інформація про рослину, SensorReadingCard з поточними показаннями, AreaChart (Recharts) за вибраний період (день/тиждень/місяць) з лінією оптимального значення, ThresholdSlider (зберігається у localStorage).
+–	AddPlantPage / EditPlantPage – єдина форма з режимом за наявністю :id. PlantTypeSelector завантажує типи з API.
+–	ProfilePage – редагування імені та прізвища, зміна пароля (currentPassword + newPassword + confirmPassword).
+–	SettingsPage – перемикач мови UA/EN, кнопка виходу.
+–	AdminDashboardPage – метрики по всій системі, графік активності, швидкі посилання на адмін-розділи.
+–	UsersPage – MUI DataGrid всіх користувачів з пагінацією, сортуванням через localeCompare, CRUD через модалки, зміна ролі.
+–	AllPlantsPage – DataGrid всіх рослин системи з ім'ям власника (user_id маппується через useGetUsersQuery), повний CRUD.
+–	PlantTypesPage – CRUD типів рослин з полями optimal_humidity, optimal_temperature, optimal_light, watering_frequency.
+–	SensorsPage – DataGrid сенсорів, перемикач is_active, повний CRUD.
+–	BackupPage – Export JSON всіх даних / налаштувань, Import JSON з ConfirmDialog, LinearProgress та лічильником imported/failed.
+3.3 UML-діаграма прецедентів
+
+Діаграма прецедентів відображає взаємодію двох акторів (Користувач та Адміністратор) з функціями системи. Адміністратор успадковує всі прецеденти користувача і доповнює їх адміністративними функціями.
+
+ 
+
+Рисунок 3.1 – Діаграма прецедентів Plant Care Web
+3.4 UML-діаграма компонентів
+
+Діаграма компонентів відображає архітектурні шари веб-застосунку та їх зв'язки. Pages-шар використовує UI-компоненти та викликає RTK Query хуки. Redux Store централізує стан аутентифікації та UI. Шар API (RTK Query) взаємодіє з бекендом через базовий запит з Bearer-токеном та обробкою 401.
+
+ 
+
+Рисунок 3.2 – Діаграма компонентів Plant Care Web
+
+ 
+3.5 Діаграма пакетів
+
+Діаграма пакетів ілюструє організацію вихідного коду проекту. Пакет api є незалежним і не посилається на UI. Пакет pages залежить від components та api через хуки. Пакет features містить Redux слайси без залежностей від UI. Пакет hooks та utils є листовими вузлами без внутрішніх залежностей.
+
+ 
+
+Рисунок 3.3 – Діаграма пакетів Plant Care Web
+
+3.6 Діаграма діяльності – автентифікація та авторизація
+
+Діаграма діяльності описує процес автентифікації від відкриття застосунку до входу на відповідну сторінку залежно від ролі. Окремо показано обробку прострочених токенів через baseQuery.
+
+ 
+
+Рисунок 3.4 – Діаграма діяльності: автентифікація та авторизація
+
+3.7 Прийняті інженерні рішення
+
+RTK Query baseQuery з обробкою 401. Базовий запит у baseApi.ts автоматично додає заголовок Authorization: Bearer {token} до всіх запитів через prepareHeaders. Токен береться з Redux Store або з localStorage (резервний варіант). При отриманні 401 диспатчиться logout() який очищає токен та isAuth. ProtectedRoute при наступному рендері перенаправляє на /login.
+
+Рольова авторизація через AdminRoute. Окрім ProtectedRoute (перевіряє isAuth), адміністративні сторінки обгорнуті AdminRoute який перевіряє user.role === 'admin'. При LogIn, якщо роль admin, DashboardRedirect автоматично перенаправляє на /admin замість /dashboard.
+
+Повна інтернаціоналізація (i18n). Застосунок підтримує 191 перекладений ключ в uk.json та en.json. Хук useFormatters повертає formatDate / formatDateTime через date-fns з локалями uk та enUS, що забезпечує регіонально-коректне форматування дат. Функція sortStrings застосовується як sortComparator у DataGrid для коректного сортування кирилічних рядків через localeCompare. При зміні мови через i18n.on('languageChanged') автоматично оновлюються атрибути document.documentElement.dir та lang.
+
+Генерація PDF через @react-pdf/renderer. PDF-звіти генеруються декларативно через React-компоненти PlantReportPDF та DashboardReportPDF. Для підтримки кирилиці зареєстровано шрифт NotoSans через Font.register. Хук useExportPDF передає вже перекладені рядки у PDF-компоненти, що забезпечує локалізацію PDF відповідно до поточної мови інтерфейсу. Готовий PDF скачується через file-saver.
+
+Резервне копіювання даних (Backup/Restore). Сторінка BackupPage збирає дані з усіх ендпоінтів через Promise.all та формує JSON-файл з полями exportedAt, version та data (users, plants, plantTypes, sensors, sensorData). При імпорті JSON обробляється послідовно: plantTypes, потім plants, потім sensors. Кожна запис обгорнута в try/catch, ведеться лічильник imported/failed. LinearProgress показує прогрес, snackbar повідомляє підсумок.
+
+Розрахунок статусу рослини (calculatePlantStatus). Функція порівнює поточні показання сенсорів з оптимальними значеннями типу рослини. Якщо відхилення перевищує 10% (DEVIATION_THRESHOLD) для 2 і більше показників – статус critical, для 1 – attention, для 0 – normal. Результат відображається кольоровим StatusChip на картках рослин.
+
+Архітектура компонентів. Кожен реюзабельний компонент розміщений у власній папці ComponentName/ з файлами ComponentName.tsx та index.ts (re-export). HTTP-запити виконуються виключно через RTK Query хуки у src/api/ – в компонентах та сторінках прямих fetch/axios відсутні. Всі форми реалізовані через react-hook-form з zod-схемами валідації.
+
+4. ВИСНОВКИ
+У ході виконання лабораторної роботи № 3 успішно розроблено повнофункціональний веб-застосунок Plant Care System з використанням React 18, TypeScript, Material-UI v5 та Redux Toolkit.
+Реалізовано чотирнадцять сторінок з чітким розподілом на користувацький та адміністративний інтерфейси. Користувацький інтерфейс забезпечує моніторинг рослин, перегляд графіків динаміки показань сенсорів (Recharts), CRUD-операції та PDF-експорт. Адміністративний інтерфейс включає управління користувачами, рослинами, типами рослин та сенсорами через MUI DataGrid, а також систему резервного копіювання з експортом та імпортом JSON.
+Повністю виконані вимоги інтернаціоналізації: підтримка Ukrainian та English мов (191 ключ перекладу), форматування дат через date-fns з локалями, сортування кириличних рядків через localeCompare, динамічне встановлення атрибуту dir на html-елементі. Застосунок взаємодіє з серверною частиною системи через захищений REST API з JWT-автентифікацією та автоматичним обробленням 401-помилок.
+Дотримано принципи чистої архітектури: RTK Query відповідає за всі HTTP-запити, Redux Toolkit за стан аутентифікації та UI, react-hook-form з zod за валідацію форм, TypeScript strict mode забезпечує типову безпеку без використання any.
+
+5. ВИКОРИСТАНІ ДЖЕРЕЛА
+1.	React Documentation. React 18 [Електронний ресурс]. – Режим доступу: https://react.dev – Дата доступу: 18.05.2026.
+2.	Material-UI Documentation. MUI v5 [Електронний ресурс]. – Режим доступу: https://mui.com/material-ui – Дата доступу: 18.05.2026.
+3.	Redux Toolkit Documentation. RTK Query [Електронний ресурс]. – Режим доступу: https://redux-toolkit.js.org/rtk-query/overview – Дата доступу: 18.05.2026.
+4.	React Router Documentation. Data APIs [Електронний ресурс]. – Режим доступу: https://reactrouter.com – Дата доступу: 18.05.2026.
+5.	Recharts Documentation [Електронний ресурс]. – Режим доступу: https://recharts.org – Дата доступу: 18.05.2026.
+6.	react-i18next Documentation [Електронний ресурс]. – Режим доступу: https://react.i18next.com – Дата доступу: 18.05.2026.
+7.	@react-pdf/renderer Documentation [Електронний ресурс]. – Режим доступу: https://react-pdf.org – Дата доступу: 18.05.2026.
+8.	Zod Documentation. TypeScript-first schema validation [Електронний ресурс]. – Режим доступу: https://zod.dev – Дата доступу: 18.05.2026.
+9.	date-fns Documentation [Електронний ресурс]. – Режим доступу: https://date-fns.org – Дата доступу: 18.05.2026.
+10.	TypeScript Documentation. Strict mode [Електронний ресурс]. – Режим доступу: https://www.typescriptlang.org/tsconfig#strict – Дата доступу: 18.05.2026.
+
+6. ВИКОРИСТАННЯ ШІ ПІД ЧАС РОЗРОБКИ
+Під час виконання лабораторної роботи було використано інструмент штучного інтелекту Claude:
+•	назва інструменту та версія: Claude Sonnet 4.6
+•	мета використання: отримання рекомендацій щодо архітектурних рішень веб-застосунку та вирішення технічних проблем локалізації, генерації PDF та резервного копіювання даних
+•	внесок автора: отримані відповіді були адаптовані під конкретну архітектуру системи PlantCare, видалено нерелевантні фрагменти, скориговано імена компонентів та хуків відповідно до структури проекту, перевірено сумісність з обраними версіями бібліотек
+1. Запит (prompt) щодо підтримки кирилиці у @react-pdf/renderer:
+Я розробляю веб-застосунок на React + TypeScript з генерацією PDF-звітів через @react-pdf/renderer 4.5.1. При спробі відрендерити текст українською мовою у PDF отримую порожні квадрати замість символів. Як правильно підключити шрифт із підтримкою кирилиці? Архітектура: хук useExportPDF збирає дані та передає їх у React-компоненти PlantReportPDF та DashboardReportPDF. PDF завантажується через file-saver.
+Отримана відповідь:
+Для підтримки кирилиці у @react-pdf/renderer необхідно зареєструвати шрифт через Font.register до першого використання PDF-компонентів. Рекомендується використати шрифт NotoSans, який має повну підтримку кирилічних символів та доступний через Google Fonts CDN. Font.register викликається один раз на рівні модуля, поза компонентами. У стилях документа слід явно вказати fontFamily: 'NotoSans' для всіх текстових елементів. Хук useExportPDF повинен передавати вже перекладені рядки через t() у PDF-компоненти, щоб локалізація відповідала поточній мові інтерфейсу незалежно від мовних налаштувань браузера.
+2. Запит (prompt) щодо коректного сортування кирилиці у MUI DataGrid:
+Я використовую MUI DataGrid v6 у React-застосунку з локалізацією UA/EN через react-i18next. При сортуванні текстових колонок з українськими значеннями порядок сортування некоректний — кирилиця сортується за кодами символів. Як реалізувати локалезалежне сортування у DataGrid з урахуванням поточної мови інтерфейсу?
+Отримана відповідь:
+Для коректного сортування кирилічних рядків у MUI DataGrid необхідно визначити власний sortComparator для текстових колонок. Функція sortComparator повинна використовувати String.prototype.localeCompare з передачею поточного locale з i18n.language. Щоб уникнути дублювання коду, рекомендується винести цю логіку у хук useFormatters як функцію sortStrings: (a, b) => a.localeCompare(b, i18n.language). Ця функція потім передається як sortComparator у визначенні колонок DataGrid. При зміні мови інтерфейсу хук автоматично повертає оновлену функцію з новим locale, що забезпечує коректне сортування без додаткових дій.
+ 
+
+ДОДАТОК А
+Відеозапис
+
+Відеозапис доповіді: https://youtu.be/8XM6K4BYkjY
+
+Хронологічний опис відеозапису: 
+
+0:00 - Вступ 
+0:45 - Реєстрація 
+1:28 - Вхід 
+1:54 - Головна сторінка (дашборд) 
+2:31 - Список рослин 
+3:00 - Створення нової рослини 
+3:24 - Редагування рослини 
+3:35 - Створення звіту для рослини 
+3:57 - Видалення рослини 
+4:08 - Профіль користувача 
+4:20 - Зміна мови застосунку 
+4:34 - Перегляд деталей рослини 
+6:15 - Адмін панель 
+
+
+ДОДАТОК Б
+
+Скріншоти застосунку та вихідний код
+
+Б.1 Скріншоти застосунку
+
+Скріншот Б.1 – LoginPage (екран входу з валідацією полів). 
+ 
+
+Скріншот Б.2 – DashboardPage (головна сторінка з метриками, графіком активності сенсорів та карточками рослин). 
+ 
+
+Скріншот Б.3 – PlantDetailPage (деталі рослини з AreaChart Recharts та слайдерами порогових значень).
+ 
+
+Скріншот Б.4 – Admin UsersPage (MUI DataGrid з управлінням користувачами та зміною ролей).
+ 
+
+Скріншот Б.5 – BackupPage (експорт/імпорт даних з LinearProgress). 
+ 
+Скріншот Б.6 – SettingsPage з переключеною мовою EN (перевірка повноти локалізації).
+ 
+
+Б.2 Вихідний код ключових компонентів
+
+Лістинг Б.1 – baseApi.ts (RTK Query базовий запит з авторизацією та 401-обробкою):
+
+1  interface ApiService {
+2      @POST("auth/login")
+3      suspend fun login(@Body request: LoginRequest): ApiResponse<LoginData>
+4  
+5      @POST("auth/register")
+6      suspend fun register(@Body r: RegisterRequest): ApiResponse<RegisterResponseData>
+7  
+8      @POST("auth/logout")
+9      suspend fun logout(): ApiResponse<Unit>
+10 
+11     @GET("my-plants")
+12     suspend fun getMyPlants(): ApiResponse<List<Plant>>
+13 
+14     @GET("my-plants/{id}")
+15     suspend fun getMyPlantById(@Path("id") id: Int): ApiResponse<Plant>
+16 
+17     @POST("my-plants")
+18     suspend fun createMyPlant(@Body r: CreatePlantRequest): ApiResponse<Plant>
+19 
+20     @PUT("my-plants/{id}")
+21     suspend fun updateMyPlant(@Path("id") id: Int,
+22                               @Body r: UpdatePlantRequest): ApiResponse<Plant>
+23 
+24     @DELETE("my-plants/{id}")
+25     suspend fun deleteMyPlant(@Path("id") id: Int): ApiResponse<Unit>
+26 
+27     @GET("plant-types")
+28     suspend fun getPlantTypes(): ApiResponse<List<PlantType>>
+29 
+30     @GET("plants/{plantId}/sensors")
+31     suspend fun getSensors(@Path("plantId") plantId: Int): ApiResponse<List<Sensor>>
+32 
+33     @GET("sensors/{sensorId}/data")
+34     suspend fun getSensorData(@Path("sensorId") sId: Int,
+35                               @Query("limit") limit: Int? = null,
+36                               @Query("from") from: String? = null,
+37                               @Query("to") to: String? = null
+38     ): ApiResponse<List<SensorData>>
+39 }
+
+Лістинг Б.2 – authSlice.ts (Redux Toolkit slice автентифікації):
+
+1  import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+2  import type { User } from '@/types';
+3  import { TOKEN_KEY } from '@/utils/constants';
+4  
+5  interface AuthState {
+6      token: string | null;
+7      user: User | null;
+8      isAuth: boolean;
+9      isInitializing: boolean;
+10 }
+11 
+12 const initialState: AuthState = {
+13     token: localStorage.getItem(TOKEN_KEY),
+14     user: null,
+15     isAuth: false,
+16     isInitializing: true,
+17 };
+18 
+19 const authSlice = createSlice({
+20     name: 'auth',
+21     initialState,
+22     reducers: {
+23         setCredentials(state, action: PayloadAction<{ user: User; token: string }>) {
+24             state.user = action.payload.user;
+25             state.token = action.payload.token;
+26             state.isAuth = true;
+27             localStorage.setItem(TOKEN_KEY, action.payload.token);
+28         },
+29         setUser(state, action: PayloadAction<User>) {
+30             state.user = action.payload;
+31             state.isAuth = true;
+32         },
+33         logout(state) {
+34             state.user = null;
+35             state.token = null;
+36             state.isAuth = false;
+37             localStorage.removeItem(TOKEN_KEY);
+38         },
+39         setInitializing(state, action: PayloadAction<boolean>) {
+40             state.isInitializing = action.payload;
+41         },
+42     },
+43 });
+44 
+45 export const { setCredentials, setUser, logout, setInitializing } = authSlice.actions;
+46 export default authSlice.reducer;
+
+Лістинг Б.3 – useFormatters.ts (хук локалізації дат та сортування):
+
+1  import { useTranslation } from 'react-i18next';
+2  import { format } from 'date-fns';
+3  import { uk, enUS } from 'date-fns/locale';
+4  
+5  export const useFormatters = () => {
+6      const { i18n } = useTranslation();
+7      const locale = i18n.language === 'uk' ? uk : enUS;
+8  
+9      return {
+10         formatDate: (date: string | Date) => format(new Date(date), 'PP', { locale }),
+11         formatDateTime: (date: string | Date) => format(new Date(date), 'PPpp', { locale }),
+12         formatMonthYear: (date: string | Date) => format(new Date(date), 'MMM yyyy', { locale }),
+13         formatNumber: (n: number) => new Intl.NumberFormat(i18n.language).format(n),
+14         sortStrings: (a: string, b: string) => a.localeCompare(b, i18n.language),
+15     };
+16 };
+
+Лістинг Б.4 – plantStatus.ts (розрахунок статусу рослини):
+
+1  import type { Plant, SensorType } from '@/types';
+2  import { DEVIATION_THRESHOLD } from './constants';
+3  
+4  export type PlantStatus = 'normal' | 'attention' | 'critical';
+5  
+6  export function calculatePlantStatus(
+7      plant: Plant,
+8      latestReadings: Partial<Record<SensorType, number>>,
+9  ): PlantStatus {
+10     if (!plant.plantType) return 'normal';
+11     const { optimal_humidity, optimal_temperature, optimal_light } = plant.plantType;
+12 
+13     const deviations: number[] = [];
+14     if (latestReadings.humidity != null)
+15         deviations.push(Math.abs(latestReadings.humidity - optimal_humidity) / optimal_humidity);
+16     if (latestReadings.temperature != null)
+17         deviations.push(
+18             Math.abs(latestReadings.temperature - optimal_temperature) / optimal_temperature,
+19         );
+20     if (latestReadings.light != null)
+21         deviations.push(Math.abs(latestReadings.light - optimal_light) / optimal_light);
+22 
+23     const outOfRange = deviations.filter((d) => d > DEVIATION_THRESHOLD).length;
+24     if (outOfRange >= 2) return 'critical';
+25     if (outOfRange === 1) return 'attention';
+26     return 'normal';
+27 }
+
+
+
+Лістинг Б.5 – SensorChart.tsx (графік Recharts з локалізованими датами):
+
+1   import {
+2       ResponsiveContainer,
+3       XAxis,
+4       YAxis,
+5       CartesianGrid,
+6       Tooltip,
+7       ReferenceLine,
+8       Area,
+9       AreaChart,
+10  } from 'recharts';
+11  import { Box, Typography } from '@mui/material';
+12  import { useTranslation } from 'react-i18next';
+13  import { format } from 'date-fns';
+14  import { uk, enUS } from 'date-fns/locale';
+15  import type { SensorData, SensorType } from '@/types';
+16  import { SENSOR_COLORS, SENSOR_UNITS } from '@/utils/constants';
+17  
+18  interface SensorChartProps {
+19      data: SensorData[];
+20      type: SensorType;
+21      period: 'day' | 'week' | 'month';
+22      optimalValue?: number;
+23  }
+24  
+25  const gradientId = (type: SensorType) => `gradient-${type}`;
+26  
+27  interface TooltipPayload {
+28      value: number;
+29  }
+30  
+31  interface CustomTooltipProps {
+32      active?: boolean;
+33      payload?: TooltipPayload[];
+34      label?: string;
+35      unit: string;
+36      typeLabel: string;
+37  }
+38  
+39  const CustomTooltip = ({ active, payload, label, unit, typeLabel }: CustomTooltipProps) => {
+40      if (active && payload && payload.length) {
+41          return (
+42              <Box
+43                  sx={{
+44                      bgcolor: '#1A1A1A',
+45                      border: '1px solid #2A2A2A',
+46                      borderRadius: 2,
+47                      p: 1.5,
+48                      fontSize: 12,
+49                  }}
+50              >
+51                  <Typography variant="caption" color="text.secondary" display="block">
+52                      {label}
+53                  </Typography>
+54                  <Typography variant="caption" fontWeight={600}>
+55                      {typeLabel}: {payload[0].value}
+56                      {unit}
+57                  </Typography>
+58              </Box>
+59          );
+60      }
+61      return null;
+62  };
+63  
+64  const PERIOD_FORMAT: Record<string, string> = {
+65      day: 'HH:mm',
+66      week: 'dd MMM',
+67      month: 'dd.MM',
+68  };
+69  
+70  export const SensorChart = ({ data, type, period, optimalValue }: SensorChartProps) => {
+71      const { t, i18n } = useTranslation();
+72      const color = SENSOR_COLORS[type];
+73      const unit = SENSOR_UNITS[type];
+74      const locale = i18n.language === 'uk' ? uk : enUS;
+75      const timeFormat = PERIOD_FORMAT[period] ?? 'dd MMM HH:mm';
+76  
+77      const chartData = data
+78          .slice()
+79          .reverse()
+80          .map((d) => ({
+81              time: format(new Date(d.timestamp || d.created_at), timeFormat, { locale }),
+82              value: d.value,
+83          }));
+84  
+85      if (chartData.length === 0) {
+86          return (
+87              <Box
+88                  sx={{
+89                      display: 'flex',
+90                      alignItems: 'center',
+91                      justifyContent: 'center',
+92                      height: 200,
+93                  }}
+94              >
+95                  <Typography variant="body2" color="text.disabled">
+96                      {t('common.noData')}
+97                  </Typography>
+98              </Box>
+99          );
+100     }
+101 
+102     return (
+103         <ResponsiveContainer width="100%" height={220}>
+104             <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+105                 <defs>
+106                     <linearGradient id={gradientId(type)} x1="0" y1="0" x2="0" y2="1">
+107                         <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+108                         <stop offset="95%" stopColor={color} stopOpacity={0} />
+109                     </linearGradient>
+110                 </defs>
+111                 <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
+112                 <XAxis
+113                     dataKey="time"
+114                     tick={{ fontSize: 10, fill: '#A1A1AA' }}
+115                     tickLine={false}
+116                     axisLine={false}
+117                     interval="preserveStartEnd"
+118                 />
+119                 <YAxis
+120                     tick={{ fontSize: 10, fill: '#A1A1AA' }}
+121                     tickLine={false}
+122                     axisLine={false}
+123                     tickFormatter={(v: number) => `${v}${unit}`}
+124                 />
+125                 <Tooltip content={<CustomTooltip unit={unit} typeLabel={t(`sensors.${type}`)} />} />
+126                 {optimalValue != null && (
+127                     <ReferenceLine
+128                         y={optimalValue}
+129                         stroke={color}
+130                         strokeDasharray="4 4"
+131                         strokeOpacity={0.6}
+132                     />
+133                 )}
+134                 <Area
+135                     type="monotone"
+136                     dataKey="value"
+137                     stroke={color}
+138                     strokeWidth={2}
+139                     fill={`url(#${gradientId(type)})`}
+140                     animationDuration={600}
+141                     dot={false}
+142                 />
+143             </AreaChart>
+144         </ResponsiveContainer>
+145     );
+146 };

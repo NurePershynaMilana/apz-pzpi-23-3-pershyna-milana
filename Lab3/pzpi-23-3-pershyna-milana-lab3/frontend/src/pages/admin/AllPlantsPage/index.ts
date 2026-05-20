@@ -1,0 +1,1 @@
+export { AllPlantsPage } from './AllPlantsPage';
