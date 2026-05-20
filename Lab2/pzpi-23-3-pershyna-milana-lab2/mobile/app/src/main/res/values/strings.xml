@@ -1,0 +1,100 @@
+<resources>
+    <string name="app_name">PlantCare</string>
+
+    <!-- Auth -->
+    <string name="login_title">Вхід</string>
+    <string name="login_email">Електронна пошта</string>
+    <string name="login_password">Пароль</string>
+    <string name="login_button">Увійти</string>
+    <string name="login_no_account">Немає акаунту? Зареєструватись</string>
+
+    <string name="register_title">Реєстрація</string>
+    <string name="register_first_name">Ім\'я</string>
+    <string name="register_last_name">Прізвище</string>
+    <string name="register_email">Електронна пошта</string>
+    <string name="register_password">Пароль</string>
+    <string name="register_button">Зареєструватись</string>
+    <string name="register_have_account">Вже є акаунт? Увійти</string>
+
+    <!-- Home -->
+    <string name="home_title">Мої рослини</string>
+    <string name="home_fab_add">Додати рослину</string>
+    <string name="home_empty">У вас ще немає рослин.\nДодайте першу!</string>
+
+    <!-- Plant status -->
+    <string name="status_normal">Норма</string>
+    <string name="status_needs_attention">Потребує уваги</string>
+    <string name="status_critical">Критично</string>
+
+    <!-- Plant Detail -->
+    <string name="plant_detail_sensors">Показники сенсорів</string>
+    <string name="plant_detail_chart_week">Тиждень</string>
+    <string name="plant_detail_chart_month">Місяць</string>
+    <string name="plant_detail_thresholds">Порогові значення</string>
+    <string name="plant_detail_edit">Редагувати</string>
+    <string name="plant_detail_delete">Видалити</string>
+    <string name="plant_detail_delete_confirm">Видалити рослину?</string>
+    <string name="plant_detail_delete_message">Цю дію не можна скасувати.</string>
+    <string name="plant_detail_water">Полити зараз</string>
+    <string name="plant_detail_light_test">Тест освітлення</string>
+    <string name="plant_detail_command_sent">Команду надіслано</string>
+    <string name="plant_detail_location">Розташування</string>
+    <string name="plant_detail_type">Тип рослини</string>
+    <string name="plant_detail_watering">Полив кожні %d днів</string>
+
+    <!-- Sensor types -->
+    <string name="sensor_humidity">Вологість</string>
+    <string name="sensor_temperature">Температура</string>
+    <string name="sensor_light">Освітлення</string>
+    <string name="sensor_unit_humidity">%%</string>
+    <string name="sensor_unit_temperature">°C</string>
+    <string name="sensor_unit_light">lux</string>
+    <string name="sensor_no_data">Немає даних</string>
+
+    <!-- Threshold -->
+    <string name="threshold_min">Мін</string>
+    <string name="threshold_max">Макс</string>
+
+    <!-- Add Plant -->
+    <string name="add_plant_title">Нова рослина</string>
+    <string name="edit_plant_title">Редагувати рослину</string>
+    <string name="add_plant_name">Назва рослини</string>
+    <string name="add_plant_type">Тип рослини</string>
+    <string name="add_plant_type_hint">Оберіть тип</string>
+    <string name="add_plant_location">Розташування</string>
+    <string name="add_plant_save">Зберегти</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Налаштування</string>
+    <string name="settings_language">Мова</string>
+    <string name="settings_language_ua">Українська</string>
+    <string name="settings_language_en">English</string>
+    <string name="settings_season">Сезонний режим</string>
+    <string name="settings_season_normal">Звичайний</string>
+    <string name="settings_season_summer">Літо</string>
+    <string name="settings_season_winter">Зима</string>
+    <string name="settings_season_vacation">Відпустка</string>
+    <string name="settings_notifications">Сповіщення</string>
+    <string name="settings_interval">Інтервал перевірки</string>
+    <string name="settings_interval_15">15 хв</string>
+    <string name="settings_interval_30">30 хв</string>
+    <string name="settings_interval_60">1 год</string>
+    <string name="settings_logout">Вийти з акаунта</string>
+
+    <!-- Notifications -->
+    <string name="notif_low_humidity">Низька вологість ґрунту</string>
+    <string name="notif_high_humidity">Висока вологість ґрунту</string>
+    <string name="notif_overheat">Перегрів</string>
+    <string name="notif_low_temp">Низька температура</string>
+    <string name="notif_low_light">Недостатнє освітлення</string>
+    <string name="notif_high_light">Надмірне освітлення</string>
+
+    <!-- Common -->
+    <string name="cancel">Скасувати</string>
+    <string name="confirm">Підтвердити</string>
+    <string name="loading">Завантаження…</string>
+    <string name="retry">Спробувати знову</string>
+    <string name="error_generic">Щось пішло не так</string>
+    <string name="error_network">Помилка мережі. Перевірте з\'єднання.</string>
+    <string name="optimal">Оптимальний: %s</string>
+</resources>

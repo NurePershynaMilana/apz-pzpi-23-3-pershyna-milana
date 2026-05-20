@@ -1,0 +1,25 @@
+package com.plantcare.mobile.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+val Primary = Color(0xFF7C3AED)
+val OnPrimary = Color(0xFFFFFFFF)
+val PrimaryContainer = Color(0xFF5B21B6)
+val OnPrimaryContainer = Color(0xFFEDE9FE)
+val Secondary = Color(0xFF8B5CF6)
+val OnSecondary = Color(0xFFFFFFFF)
+val SecondaryContainer = Color(0xFF6D28D9)
+val OnSecondaryContainer = Color(0xFFEDE9FE)
+val Background = Color(0xFF0F0F0F)
+val OnBackground = Color(0xFFFFFFFF)
+val Surface = Color(0xFF1A1A1A)
+val OnSurface = Color(0xFFE5E7EB)
+val SurfaceVariant = Color(0xFF242424)
+val OnSurfaceVariant = Color(0xFFD1D5DB)
+val Outline = Color(0xFF404040)
+val Error = Color(0xFFEF4444)
+val OnError = Color(0xFFFFFFFF)
+val ErrorContainer = Color(0xFF7F1D1D)
+val OnErrorContainer = Color(0xFFFEE2E2)
+val Tertiary = Color(0xFFA78BFA)
+val OnTertiary = Color(0xFFFFFFFF)

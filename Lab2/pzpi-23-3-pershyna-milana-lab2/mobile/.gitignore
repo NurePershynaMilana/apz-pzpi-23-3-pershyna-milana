@@ -1,0 +1,35 @@
+# Android gitignore
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+*.jks
+*.keystore
+
+# Module build outputs
+app/build/
+**/build/
+
+# Kotlin
+.kotlin/
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Secrets & local config
+google-services.json
+*.env
+*.local
+secrets.properties

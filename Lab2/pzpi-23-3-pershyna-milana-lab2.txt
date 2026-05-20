@@ -1,0 +1,431 @@
+МІНІСТЕРСТВО ОСВІТИ І НАУКИ УКРАЇНИ
+ 
+ХАРКІВСЬКИЙ НАЦІОНАЛЬНИЙ
+УНІВЕРСИТЕТ РАДІОЕЛЕКТРОНІКИ
+ 
+Кафедра «Програмна інженерія»
+ 
+ 
+
+
+ЗВІТ
+до лабораторної роботи 2
+з дисципліни «Архітектура програмного забезпечення»
+
+ 
+
+
+
+
+Виконав:                                            Перевірив:
+ст. гр. ПЗПІ-23-3                                   ст. викладач катедри ПІ
+Першина М. А.                                       Сокорчук Ігор Петрович
+
+
+
+
+
+
+
+Харків 2026
+
+
+1 ІСТОРІЯ ЗМІН
+№	Дата	Версія звіту	Опис змін та виправлень
+1	17.05.2026	0.1	Початок роботи над Vision & Scope
+2	18.05.2026	0.2	Доопрацювання звіту та відеозапису
+
+
+
+2 ЗАВДАННЯ
+Ознайомитися з процесом розробки мобільного застосунку для платформи Android з використанням сучасних архітектурних підходів. Отримати практичні навички реалізації мобільного клієнта у складі розподіленої IoT-системи, що взаємодіє з серверною частиною через REST API.
+Розробити Android-застосунок Plant Care System на основі Kotlin та Jetpack Compose як частину системи моніторингу та догляду за кімнатними рослинами. Застосунок повинен забезпечувати автентифікацію користувачів, CRUD-операції над рослинами, перегляд даних з IoT-сенсорів, фонову перевірку стану рослин з надсиланням локальних push-сповіщень, а також локалізацію інтерфейсу українською та англійською мовами.
+Звіт повинен містити: UML-діаграму прецедентів (Use Case Diagram), UML-діаграму компонентів (Component Diagram), діаграму пакетів (Package Diagram), діаграму діяльності (Activity Diagram), опис прийнятих інженерних рішень та опис будови застосунку та його взаємодії з іншими частинами системи.
+
+3. ОПИС ВИКОНАНОЇ РОБОТИ
+Розроблено повнофункціональний Android-застосунок Plant Care для моніторингу та догляду за кімнатними рослинами через IoT-датчики. Застосунок є мобільним клієнтом системи Plant Care System і взаємодіє з готовим серверним API на Node.js/Express/PostgreSQL. Реалізовано сім екранів, автентифікацію через JWT, CRUD-операції для рослин, перегляд показань сенсорів з графіками, фоновий WorkManager-worker для моніторингу та локальні push-сповіщення.
+3.1 Архітектура застосунку та технічний стек
+
+Застосунок побудований за принципами MVVM (Model–View–ViewModel) з однонаправленим потоком даних через StateFlow. Кожен екран (View) підписується на стан свого ViewModel і реагує лише на його зміни, що усуває прямий зв'язок між UI та шаром даних.
+Технічний стек застосунку наведений у таблиці 3.1.
+
+Таблиця 3.1 – Технічний стек застосунку
+
+Бібліотека	Версія	Призначення
+Kotlin	2.2.10	Основна мова розробки
+Jetpack Compose	BOM 2026.02.01	Декларативний UI фреймворк
+Hilt	2.59.2	Впровадження залежностей (DI)
+Retrofit	2.11.0	HTTP-клієнт для REST API
+OkHttp	4.12.0	Мережевий клієнт, інтерцептори
+Moshi	1.15.2	Серіалізація/десеріалізація JSON
+Navigation Compose	2.9.0	Навігація між екранами
+DataStore Preferences	1.1.4	Зберігання токену та налаштувань
+WorkManager	2.10.1	Фонові задачі (перевірка сенсорів)
+AppCompat	1.7.0	Перемикання локалі
+Coil 3	3.2.0	Завантаження зображень
+
+Структура пакетів проекту: com.plantcare.mobile/data (api, model, repository, local), ui (auth, home, plant, settings, components, navigation, theme), di, worker, util.
+Мінімальна версія SDK: API 26 (Android 8.0). Ціловий SDK: API 36. Дизайн: лише темна тема з фіолетовими акцентами (primary: #7C3AED, background: #0F0F0F, surface: #1A1A1A).
+3.2 Опис екранів застосунку
+
+Застосунок містить сім екранів, що утворюють замкнений навігаційний граф:
+–	SplashScreen – перевіряє наявність JWT-токену у DataStore при запуску і автоматично перенаправляє або на HomeScreen (токен є), або на LoginScreen (токен відсутній).
+–	LoginScreen – форма входу з полями email та password. Після успішної автентифікації токен зберігається у DataStore, користувач переходить на HomeScreen.
+–	RegisterScreen – форма реєстрації з полями email, ім'я, прізвище, пароль. Після реєстрації користувач повертається на LoginScreen.
+–	HomeScreen – список рослин поточного користувача у вигляді карток PlantStatusCard із кольоровим індикатором стану (NORMAL / NEEDS_ATTENTION / CRITICAL). Список оновлюється при кожному поверненні на екран через repeatOnLifecycle(RESUMED). Підтримується Pull-to-Refresh.
+–	PlantDetailScreen – детальна інформація про рослину, список активних сенсорів (SensorChip), кастомний лінійний графік (LineChart via Canvas) показань за тиждень/місяць, порогові значення, кнопки редагування та видалення.
+–	AddPlantScreen – форма додавання або редагування рослини з Dropdown для вибору типу рослини. Режим редагування визначається через savedStateHandle.get<Int>("plantId")?.takeIf { it > 0 }.
+–	SettingsScreen – перемикання мови (UA/EN) через AppCompatDelegate, вибір сезонного режиму, toggle сповіщень, повзунок інтервалу перевірки, кнопка виходу з системи.
+3.3 UML-діаграма прецедентів
+
+Діаграма прецедентів відображає взаємодію двох акторів (Користувач та WorkManager) з функціями системи. Користувач має доступ до всіх основних операцій через UI, тоді як WorkManager виконує автоматичні перевірки у фоновому режимі.
+
+ 
+
+Рисунок 3.1 – Діаграма прецедентів Plant Care Mobile
+
+3.4 UML-діаграма компонентів
+
+Діаграма компонентів відображає архітектурні шари застосунку та зв'язки між ними. UI-шар (Jetpack Compose) взаємодіє виключно з ViewModelами через StateFlow. ViewModels делегують операції відповідним репозиторіям. Шар даних містить Retrofit-клієнт з OkHttp-інтерцептором та DataStore для локального зберігання. Worker виконується незалежно від UI та використовує ті самі репозиторії через Hilt DI.
+
+ 
+
+Рисунок 3.2 – Діаграма компонентів Plant Care Mobile
+
+ 
+3.5 Діаграма пакетів
+
+Діаграма пакетів ілюструє організацію вихідного коду проекту. Пакет data є незалежним і не посилається на UI. Пакет ui залежить від data через ViewModels і репозиторії. Пакет worker залежить від data.repository для доступу до рослин і сенсорів. Пакет di пов'язує всі шари через інверсію залежностей Hilt.
+
+ 
+
+Рисунок 3.3 – Діаграма пакетів Plant Care Mobile
+
+3.6 Діаграма діяльності – автентифікація та навігація
+
+Діаграма діяльності описує процес автентифікації користувача від запуску застосунку до відкриття головного екрана. Окремо показано flow обробки 401 Unauthorized при протермінованому токені.
+
+ 
+
+Рисунок 3.4 – Діаграма діяльності: автентифікація та навігація
+
+ 
+3.7 Прийняті інженерні рішення
+
+JWT-автентифікація через AuthInterceptor. Токен зберігається у DataStore Preferences (не SharedPreferences) для асинхронного доступу. AuthInterceptor автоматично додає заголовок Authorization: Bearer {token} до всіх запитів, окрім /auth/login та /auth/register. При отриманні відповіді 401 інтерцептор видаляє токен через dataStore.edit { it.remove(TOKEN) } та емітить подію у AuthEventBus (SharedFlow<Unit>). NavGraph підписується на цей flow через LaunchedEffect і здійснює навігацію на LoginScreen з очищенням back-стеку (popUpTo(0)).
+
+Hilt Workers для фонових задач. PlantCareApp реалізує Configuration.Provider і надає HiltWorkerFactory, що дозволяє впроваджувати залежності у SensorCheckWorker через @AssistedInject. Автоматична ініціалізація WorkManager вимкнена у AndroidManifest.xml (tools:node="remove"), щоб уникнути конфлікту зі стандартною фабрикою.
+
+safeApiCall<T> – узагальнена функція-обгортка над Retrofit. Обробляє три сценарії: success=true і data != null → Result.success(data); success=true і data == null (logout, delete) → Result.success(Unit as T); HTTP-виняток → парсинг тіла помилки через Moshi і Result.failure(Exception(message)).
+
+Кастомний Moshi-адаптер для Unit. Оскільки Moshi не має вбудованого адаптера для типу Unit, у AppModule.provideMoshi() зареєстровано анонімний JsonAdapter<Unit>, який при десеріалізації викликає reader.skipValue() і повертає Unit. Це дозволяє коректно обробляти відповіді ApiResponse<Unit> для ендпоінтів DELETE /api/my-plants/{id} та POST /api/auth/logout.
+
+Перемикання локалі при запуску. setApplicationLocales() викликається не лише при зміні мови у налаштуваннях, але й у PlantCareApp.onCreate() через applySavedLocale(): функція читає збережений код мови з DataStore синхронно через runBlocking і застосовує його до AppCompatDelegate. MainActivity успадковує AppCompatActivity (не ComponentActivity), що є обов'язковим для коректного перезапуску Activity при зміні локалі.
+
+Оновлення списку рослин після навігації. HomeViewModel не має init-блоку з автозавантаженням – замість цього HomeScreen використовує LaunchedEffect з repeatOnLifecycle(Lifecycle.State.RESUMED), що гарантує перезавантаження списку при кожному поверненні на екран після додавання, редагування або видалення рослини.
+
+Кастомний LineChart через Canvas. Бібліотека Vico 2.0.0 була видалена через несумісність API (CartesianChartModelProducer відсутній). Замість неї реалізовано кастомний @Composable LineChart, який малює графік показань сенсорів безпосередньо на Canvas з підтримкою вибору діапазону (тиждень/місяць).
+
+network_security_config.xml дозволяє cleartext-трафік лише для 10.0.2.2 (хост-машина з емулятора), що є безпечнішим за глобальне вимкнення перевірки TLS. Base URL: http://10.0.2.2:3000/api.  Інтеграція з IoT (Arduino). Бекенд отримує дані від Arduino-пристрою через ендпоінт POST /api/sensor-data/bulk. Arduino зчитує показання з датчиків DHT22 (вологість/температура) та BH1750 (освітленість) і надсилає масив записів. SensorCheckWorker у мобільному застосунку зчитує ці дані через GET /api/sensors/{sensorId}/data і порівнює з оптимальними значеннями типу рослини.  Таблиця plant_actions у базі даних. Бекенд підтримує таблицю plant_actions (action_id, plant_id, user_id, action_type, action_value, action_duration, notes, performed_at) для журналювання дій над рослинами: полив, освітлення, вентиляція, ручна перевірка, удобрення. Типи дій визначені як ENUM: watering, lighting, ventilation, manual_check, fertilizing.
+
+4. ВИСНОВКИ
+У ході виконання лабораторної роботи № 2 успішно розроблено повнофункціональний Android-застосунок Plant Care System з використанням Kotlin, Jetpack Compose та сучасних архітектурних підходів.
+Реалізовано семиекранний мобільний клієнт із MVVM-архітектурою, JWT-автентифікацією через OkHttp-інтерцептор, повним CRUD-інтерфейсом для управління рослинами, відображенням показань IoT-сенсорів із кастомними графіками на Canvas, фоновим моніторингом через WorkManager з Hilt-інтеграцією та локальними push-сповіщеннями про критичний стан рослин.
+Впроваджено локалізацію інтерфейсу українською та англійською мовами з коректним перемиканням при старті через AppCompatDelegate. Вирішено 10 нетривіальних технічних проблем, зокрема: обробка Unit-відповідей Moshi, фіксація 401-logout через SharedFlow, коректне оновлення списку через repeatOnLifecycle, видалення несумісної бібліотеки Vico та її заміна на кастомний Canvas-компонент.
+Застосунок взаємодіє з серверною частиною системи (Node.js/Express/PostgreSQL) через захищений REST API із JWT-автентифікацією і готовий до інтеграції з реальними IoT-пристроями.
+
+5. ВИКОРИСТАНІ ДЖЕРЕЛА
+1.	Android Developer Documentation. Jetpack Compose [Електронний ресурс]. – Режим доступу: https://developer.android.com/jetpack/compose – Дата доступу: 17.05.2026.
+2.	Android Developer Documentation. Architecture Guide (MVVM) [Електронний ресурс]. – Режим доступу: https://developer.android.com/topic/architecture – Дата доступу: 17.05.2026.
+3.	Hilt Dependency Injection Documentation [Електронний ресурс]. – Режим доступу: https://dagger.dev/hilt/ – Дата доступу: 17.05.2026.
+4.	Retrofit. A type-safe HTTP client for Android and Java [Електронний ресурс]. – Режим доступу: https://square.github.io/retrofit/ – Дата доступу: 17.05.2026.
+5.	DataStore Documentation [Електронний ресурс]. – Режим доступу: https://developer.android.com/topic/libraries/architecture/datastore – Дата доступу: 17.05.2026.
+6.	WorkManager Documentation [Електронний ресурс]. – Режим доступу: https://developer.android.com/topic/libraries/architecture/workmanager – Дата доступу: 17.05.2026.
+7.	Kotlin Documentation [Електронний ресурс]. – Режим доступу: https://kotlinlang.org/docs/home.html – Дата доступу: 17.05.2026.
+8.	Moshi. A modern JSON library for Android and Java [Електронний ресурс]. – Режим доступу: https://github.com/square/moshi – Дата доступу: 17.05.2026.
+6. ВИКОРИСТАННЯ ШІ ПІД ЧАС РОЗРОБКИ
+ 
+6. ВИКОРИСТАННЯ ШІ ПІД ЧАС РОЗРОБКИ
+Під час виконання лабораторної роботи було використано інструмент штучного інтелекту Claude:
+•	назва інструменту та версія: Claude Sonnet 4.6
+•	мета використання: отримання рекомендацій щодо архітектурних рішень Android-застосунку та вирішення технічних проблем інтеграції компонентів
+•	внесок автора: отримані відповіді були адаптовані під конкретну архітектуру системи PlantCare, видалено нерелевантні фрагменти коду, скориговано імена пакетів та класів відповідно до структури проекту, перевірено сумісність з обраними версіями бібліотек
+1. Запит (prompt) щодо обробки 401 Unauthorized через SharedFlow:
+Я розробляю Android-застосунок на Kotlin + Jetpack Compose + Retrofit. У мене є OkHttp-інтерцептор AuthInterceptor, який при отриманні відповіді 401 повинен видаляти JWT-токен з DataStore та ініціювати навігацію на LoginScreen. Проблема: інтерцептор виконується у фоновому потоці OkHttp і не має доступу до NavController. Як правильно організувати комунікацію між AuthInterceptor та NavGraph у Compose? Архітектура: MVVM, Hilt DI, NavHost у MainActivity.
+Отримана відповідь:
+Для вирішення цієї задачі рекомендується патерн EventBus через SharedFlow. Створіть singleton-об'єкт AuthEventBus з MutableSharedFlow<Unit>. AuthInterceptor викликає AuthEventBus.emit401() через runBlocking після видалення токену. NavGraph підписується на цей flow через LaunchedEffect і виконує навігацію на LoginScreen з popUpTo(0), що очищає весь back-стек. SharedFlow з replay=0 гарантує, що подія не буде оброблена повторно при рекомпозиції.
+2. Запит (prompt) щодо інтеграції Hilt у WorkManager:
+Я використовую WorkManager для фонового моніторингу сенсорів у Android-застосунку з Hilt DI. При спробі впровадити репозиторії у SensorCheckWorker через конструктор отримую RuntimeException під час виконання Worker. Як правильно налаштувати Hilt для ін'єкцій у CoroutineWorker? Що потрібно змінити в Application class та AndroidManifest?
+Отримана відповідь:
+Для коректної роботи Hilt з WorkManager необхідно виконати три кроки. По-перше, Application class повинен реалізовувати інтерфейс Configuration.Provider і надавати HiltWorkerFactory через @Inject. По-друге, у AndroidManifest.xml необхідно вимкнути автоматичну ініціалізацію WorkManager через tools:node="remove" для WorkManagerInitializer, щоб уникнути конфлікту зі стандартною фабрикою. По-третє, сам Worker анотується @HiltWorker, а залежності впроваджуються через @AssistedInject з обов'язковими параметрами Context та WorkerParameters, анотованими @Assisted.
+
+
+
+ДОДАТОК А
+Відеозапис
+
+Відеозапис доповіді: https://youtu.be/iUrcxAj6tYc
+
+Хронологічний опис відеозапису: 
+
+0:00 - Вступ 
+0:34 - Реєстрація 
+1:09 - Вхід 
+1:30 - Головна сторінка 
+1:38 - Створенння нової рослини 
+2:00 - Перегляд деталей рослини 
+2:48 - Редагування рослини 
+3:15 - Видалення рослини 
+3:35 - Налаштування додатку 
+4:45 - Вихід з акаунту 
+
+
+ДОДАТОК Б
+
+Скріншоти застосунку та вихідний код
+Б.1 Скріншоти застосунку
+
+Скріншот Б.1 – LoginScreen (екран входу в систему). 
+ 
+
+Скріншот Б.2 – HomeScreen (головний екран зі списком рослин та кольоровими статусами NORMAL / NEEDS_ATTENTION / CRITICAL). 
+ 
+
+Скріншот Б.3 – PlantDetailScreen (деталі рослини з показаннями сенсорів та графіком). 
+ 
+
+Скріншот Б.4 – AddPlantScreen (форма додавання рослини з Dropdown вибору типу). 
+ 
+
+Скріншот Б.5 – SettingsScreen (налаштування мови, сповіщень, сезонного режиму).
+ 
+
+Б.2 Вихідний код ключових компонентів
+
+Лістинг Б.1 – PlantCareApp.kt (Application class, ініціалізація Hilt та локалі):
+
+1  package com.plantcare.mobile
+2  
+3  import android.app.Application
+4  import android.app.NotificationChannel
+5  import android.app.NotificationManager
+6  import android.content.Context
+7  import android.os.Build
+8  import androidx.appcompat.app.AppCompatDelegate
+9  import androidx.core.os.LocaleListCompat
+10 import androidx.hilt.work.HiltWorkerFactory
+11 import androidx.work.Configuration
+12 import com.plantcare.mobile.data.local.DataStoreKeys
+13 import com.plantcare.mobile.data.local.appDataStore
+14 import dagger.hilt.android.HiltAndroidApp
+15 import kotlinx.coroutines.flow.firstOrNull
+16 import kotlinx.coroutines.runBlocking
+17 import javax.inject.Inject
+18 
+19 @HiltAndroidApp
+20 class PlantCareApp : Application(), Configuration.Provider {
+21 
+22     @Inject
+23     lateinit var workerFactory: HiltWorkerFactory
+24 
+25     override val workManagerConfiguration: Configuration
+26         get() = Configuration.Builder()
+27             .setWorkerFactory(workerFactory)
+28             .build()
+29 
+30     override fun onCreate() {
+31         super.onCreate()
+32         applySavedLocale()
+33         createNotificationChannel()
+34     }
+35 
+36     private fun applySavedLocale() {
+37         val prefs = runBlocking { appDataStore.data.firstOrNull() }
+38         val language = prefs?.get(DataStoreKeys.LANGUAGE) ?: "uk"
+39         AppCompatDelegate.setApplicationLocales(
+40             LocaleListCompat.forLanguageTags(language))
+41     }
+42 
+43     private fun createNotificationChannel() {
+44         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+45             val channel = NotificationChannel(
+46                 CHANNEL_ID,
+47                 "Сповіщення про рослини",
+48                 NotificationManager.IMPORTANCE_HIGH
+49             ).apply { description = "Сповіщення про стан рослин" }
+50             val manager = getSystemService(
+51                 Context.NOTIFICATION_SERVICE) as NotificationManager
+52             manager.createNotificationChannel(channel)
+53         }
+54     }
+55 
+56     companion object { const val CHANNEL_ID = "plant_alerts" }
+57 }
+
+Лістинг Б.2 – AuthInterceptor.kt (Bearer-токен та обробка 401):
+
+1  package com.plantcare.mobile.data.api
+2  
+3  import androidx.datastore.core.DataStore
+4  import androidx.datastore.preferences.core.Preferences
+5  import androidx.datastore.preferences.core.edit
+6  import com.plantcare.mobile.data.local.DataStoreKeys
+7  import com.plantcare.mobile.util.AuthEventBus
+8  import kotlinx.coroutines.flow.firstOrNull
+9  import kotlinx.coroutines.flow.map
+10 import kotlinx.coroutines.runBlocking
+11 import okhttp3.Interceptor
+12 import okhttp3.Response
+13 
+14 class AuthInterceptor(
+15     private val dataStore: DataStore<Preferences>
+16 ) : Interceptor {
+17 
+18     private val skipPaths = listOf("/auth/login", "/auth/register")
+19 
+20     override fun intercept(chain: Interceptor.Chain): Response {
+21         val request = chain.request()
+22         val path = request.url.encodedPath
+23         val shouldSkip = skipPaths.any { path.contains(it) }
+24 
+25         val newRequest = if (shouldSkip) { request } else {
+26             val token = runBlocking {
+27                 dataStore.data.map { it[DataStoreKeys.TOKEN] }.firstOrNull()
+28             }
+29             if (token != null) {
+30                 request.newBuilder()
+31                     .addHeader("Authorization", "Bearer $token")
+32                     .build()
+33             } else { request }
+34         }
+35 
+36         val response = chain.proceed(newRequest)
+37 
+38         if (response.code == 401 && !shouldSkip) {
+39             runBlocking { dataStore.edit { it.remove(DataStoreKeys.TOKEN) } }
+40             AuthEventBus.emit401()
+41         }
+42         return response
+43     }
+44 }
+
+Лістинг Б.3 – Extensions.kt (safeApiCall<T>):
+
+1  package com.plantcare.mobile.util
+2  
+3  import com.plantcare.mobile.data.model.ApiResponse
+4  import retrofit2.HttpException
+5  
+6  suspend fun <T> safeApiCall(call: suspend () -> ApiResponse<T>): Result<T> {
+7      return try {
+8          val response = call()
+9          if (response.success) {
+10             val data = response.data
+11             if (data != null) {
+12                 Result.success(data)
+13             } else {
+14                 // Unit responses (logout, delete): success=true, data=null
+15                 @Suppress("UNCHECKED_CAST")
+16                 Result.success(Unit as T)
+17             }
+18         } else {
+19             Result.failure(Exception(response.message ?: "Помилка сервера"))
+20         }
+21     } catch (e: HttpException) {
+22         val bodyString = e.response()?.errorBody()?.string()
+23         val message = try {
+24             errorAdapter.fromJson(bodyString ?: "")?.error ?: e.message()
+25         } catch (_: Exception) { e.message() }
+26         Result.failure(Exception(message))
+27     } catch (e: Exception) {
+28         Result.failure(e)
+29     }
+30 }
+
+Лістинг Б.4 – WorkManagerScheduler.kt та SensorCheckWorker.kt (фоновий моніторинг):
+
+1  object WorkManagerScheduler {
+2      private const val WORK_NAME = "sensor_check_work"
+3  
+4      fun schedule(context: Context, intervalMinutes: Int) {
+5          val safeInterval = intervalMinutes.coerceAtLeast(15).toLong()
+6          val request = PeriodicWorkRequestBuilder<SensorCheckWorker>(
+7              safeInterval, TimeUnit.MINUTES).build()
+8          WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+9              WORK_NAME, ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE, request)
+10     }
+11 
+12     fun cancel(context: Context) {
+13         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+14     }
+15 }
+16 
+17 @HiltWorker
+18 class SensorCheckWorker @AssistedInject constructor(
+19     @Assisted private val appContext: Context,
+20     @Assisted params: WorkerParameters,
+21     private val plantRepository: PlantRepository,
+22     private val sensorRepository: SensorRepository
+23 ) : CoroutineWorker(appContext, params) {
+24 
+25     override suspend fun doWork(): Result {
+26         return try {
+27             val plants = plantRepository.getMyPlants()
+28                 .getOrElse { return Result.failure() }
+29             plants.forEach { plant ->
+30                 val plantType = plant.plantType ?: return@forEach
+31                 val sensors = sensorRepository
+32                     .getSensors(plant.plantId).getOrElse { emptyList() }
+33                 sensors.filter { it.isActive }.forEach { sensor ->
+34                     val latest = sensorRepository
+35                         .getSensorData(sensor.sensorId, limit = 1)
+36                         .getOrElse { emptyList() }.firstOrNull() ?: return@forEach
+37                     // ... compare with optimal values, send notification
+38                 }
+39             }
+40             Result.success()
+41         } catch (e: Exception) { Result.retry() }
+42     }
+43 }
+
+Лістинг Б.5 – ApiService.kt (Retrofit-інтерфейс):
+
+1  interface ApiService {
+2      @POST("auth/login")
+3      suspend fun login(@Body request: LoginRequest): ApiResponse<LoginData>
+4  
+5      @POST("auth/register")
+6      suspend fun register(@Body r: RegisterRequest): ApiResponse<RegisterResponseData>
+7  
+8      @POST("auth/logout")
+9      suspend fun logout(): ApiResponse<Unit>
+10 
+11     @GET("my-plants")
+12     suspend fun getMyPlants(): ApiResponse<List<Plant>>
+13 
+14     @GET("my-plants/{id}")
+15     suspend fun getMyPlantById(@Path("id") id: Int): ApiResponse<Plant>
+16 
+17     @POST("my-plants")
+18     suspend fun createMyPlant(@Body r: CreatePlantRequest): ApiResponse<Plant>
+19 
+20     @PUT("my-plants/{id}")
+21     suspend fun updateMyPlant(@Path("id") id: Int,
+22                               @Body r: UpdatePlantRequest): ApiResponse<Plant>
+23 
+24     @DELETE("my-plants/{id}")
+25     suspend fun deleteMyPlant(@Path("id") id: Int): ApiResponse<Unit>
+26 
+27     @GET("plant-types")
+28     suspend fun getPlantTypes(): ApiResponse<List<PlantType>>
+29 
+30     @GET("plants/{plantId}/sensors")
+31     suspend fun getSensors(@Path("plantId") plantId: Int): ApiResponse<List<Sensor>>
+32 
+33     @GET("sensors/{sensorId}/data")
+34     suspend fun getSensorData(@Path("sensorId") sId: Int,
+35                               @Query("limit") limit: Int? = null,
+36                               @Query("from") from: String? = null,
+37                               @Query("to") to: String? = null
+38     ): ApiResponse<List<SensorData>>
+39 }

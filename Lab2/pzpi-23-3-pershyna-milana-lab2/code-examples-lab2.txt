@@ -1,0 +1,17 @@
+Під час виконання лабораторної роботи було використано інструмент штучного інтелекту Claude:
+
+назва інструменту та версія: Claude Sonnet 4.6
+
+мета використання: отримання рекомендацій щодо архітектурних рішень Android-застосунку та вирішення технічних проблем інтеграції компонентів
+
+внесок автора: отримані відповіді були адаптовані під конкретну архітектуру системи PlantCare, видалено нерелевантні фрагменти коду, скориговано імена пакетів та класів відповідно до структури проекту, перевірено сумісність з обраними версіями бібліотек
+
+1. Запит (prompt) щодо обробки 401 Unauthorized через SharedFlow:
+Я розробляю Android-застосунок на Kotlin + Jetpack Compose + Retrofit. У мене є OkHttp-інтерцептор AuthInterceptor, який при отриманні відповіді 401 повинен видаляти JWT-токен з DataStore та ініціювати навігацію на LoginScreen. Проблема: інтерцептор виконується у фоновому потоці OkHttp і не має доступу до NavController. Як правильно організувати комунікацію між AuthInterceptor та NavGraph у Compose? Архітектура: MVVM, Hilt DI, NavHost у MainActivity.
+Отримана відповідь:
+Для вирішення цієї задачі рекомендується патерн EventBus через SharedFlow. Створіть singleton-об'єкт AuthEventBus з MutableSharedFlow<Unit>. AuthInterceptor викликає AuthEventBus.emit401() через runBlocking після видалення токену. NavGraph підписується на цей flow через LaunchedEffect і виконує навігацію на LoginScreen з popUpTo(0), що очищає весь back-стек. SharedFlow з replay=0 гарантує, що подія не буде оброблена повторно при рекомпозиції.
+
+2. Запит (prompt) щодо інтеграції Hilt у WorkManager:
+Я використовую WorkManager для фонового моніторингу сенсорів у Android-застосунку з Hilt DI. При спробі впровадити репозиторії у SensorCheckWorker через конструктор отримую RuntimeException під час виконання Worker. Як правильно налаштувати Hilt для ін'єкцій у CoroutineWorker? Що потрібно змінити в Application class та AndroidManifest?
+Отримана відповідь:
+Для коректної роботи Hilt з WorkManager необхідно виконати три кроки. По-перше, Application class повинен реалізовувати інтерфейс Configuration.Provider і надавати HiltWorkerFactory через @Inject. По-друге, у AndroidManifest.xml необхідно вимкнути автоматичну ініціалізацію WorkManager через tools:node="remove" для WorkManagerInitializer, щоб уникнути конфлікту зі стандартною фабрикою. По-третє, сам Worker анотується @HiltWorker, а залежності впроваджуються через @AssistedInject з обов'язковими параметрами Context та WorkerParameters, анотованими @Assisted.

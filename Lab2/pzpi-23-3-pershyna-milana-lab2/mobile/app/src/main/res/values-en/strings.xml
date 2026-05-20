@@ -1,0 +1,100 @@
+<resources>
+    <string name="app_name">PlantCare</string>
+
+    <!-- Auth -->
+    <string name="login_title">Login</string>
+    <string name="login_email">Email</string>
+    <string name="login_password">Password</string>
+    <string name="login_button">Sign In</string>
+    <string name="login_no_account">No account? Register</string>
+
+    <string name="register_title">Register</string>
+    <string name="register_first_name">First Name</string>
+    <string name="register_last_name">Last Name</string>
+    <string name="register_email">Email</string>
+    <string name="register_password">Password</string>
+    <string name="register_button">Register</string>
+    <string name="register_have_account">Already have an account? Sign In</string>
+
+    <!-- Home -->
+    <string name="home_title">My Plants</string>
+    <string name="home_fab_add">Add Plant</string>
+    <string name="home_empty">You have no plants yet.\nAdd your first one!</string>
+
+    <!-- Plant status -->
+    <string name="status_normal">Normal</string>
+    <string name="status_needs_attention">Needs Attention</string>
+    <string name="status_critical">Critical</string>
+
+    <!-- Plant Detail -->
+    <string name="plant_detail_sensors">Sensor Readings</string>
+    <string name="plant_detail_chart_week">Week</string>
+    <string name="plant_detail_chart_month">Month</string>
+    <string name="plant_detail_thresholds">Threshold Values</string>
+    <string name="plant_detail_edit">Edit</string>
+    <string name="plant_detail_delete">Delete</string>
+    <string name="plant_detail_delete_confirm">Delete plant?</string>
+    <string name="plant_detail_delete_message">This action cannot be undone.</string>
+    <string name="plant_detail_water">Water Now</string>
+    <string name="plant_detail_light_test">Light Test</string>
+    <string name="plant_detail_command_sent">Command sent</string>
+    <string name="plant_detail_location">Location</string>
+    <string name="plant_detail_type">Plant Type</string>
+    <string name="plant_detail_watering">Water every %d days</string>
+
+    <!-- Sensor types -->
+    <string name="sensor_humidity">Humidity</string>
+    <string name="sensor_temperature">Temperature</string>
+    <string name="sensor_light">Light</string>
+    <string name="sensor_unit_humidity">%%</string>
+    <string name="sensor_unit_temperature">°C</string>
+    <string name="sensor_unit_light">lux</string>
+    <string name="sensor_no_data">No data</string>
+
+    <!-- Threshold -->
+    <string name="threshold_min">Min</string>
+    <string name="threshold_max">Max</string>
+
+    <!-- Add Plant -->
+    <string name="add_plant_title">New Plant</string>
+    <string name="edit_plant_title">Edit Plant</string>
+    <string name="add_plant_name">Plant Name</string>
+    <string name="add_plant_type">Plant Type</string>
+    <string name="add_plant_type_hint">Select type</string>
+    <string name="add_plant_location">Location</string>
+    <string name="add_plant_save">Save</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_ua">Ukrainian</string>
+    <string name="settings_language_en">English</string>
+    <string name="settings_season">Season Mode</string>
+    <string name="settings_season_normal">Normal</string>
+    <string name="settings_season_summer">Summer</string>
+    <string name="settings_season_winter">Winter</string>
+    <string name="settings_season_vacation">Vacation</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_interval">Check Interval</string>
+    <string name="settings_interval_15">15 min</string>
+    <string name="settings_interval_30">30 min</string>
+    <string name="settings_interval_60">1 hour</string>
+    <string name="settings_logout">Sign Out</string>
+
+    <!-- Notifications -->
+    <string name="notif_low_humidity">Low soil humidity</string>
+    <string name="notif_high_humidity">High soil humidity</string>
+    <string name="notif_overheat">Overheating</string>
+    <string name="notif_low_temp">Low temperature</string>
+    <string name="notif_low_light">Insufficient light</string>
+    <string name="notif_high_light">Excessive light</string>
+
+    <!-- Common -->
+    <string name="cancel">Cancel</string>
+    <string name="confirm">Confirm</string>
+    <string name="loading">Loading…</string>
+    <string name="retry">Try Again</string>
+    <string name="error_generic">Something went wrong</string>
+    <string name="error_network">Network error. Check your connection.</string>
+    <string name="optimal">Optimal: %s</string>
+</resources>
