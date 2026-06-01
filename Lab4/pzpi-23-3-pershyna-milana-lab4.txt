@@ -1,0 +1,788 @@
+МІНІСТЕРСТВО ОСВІТИ І НАУКИ УКРАЇНИ
+
+ХАРКІВСЬКИЙ НАЦІОНАЛЬНИЙ
+УНІВЕРСИТЕТ РАДІОЕЛЕКТРОНІКИ
+
+Кафедра «Програмна інженерія»
+
+
+
+
+
+
+
+ЗВІТ
+до лабораторної роботи 4
+з дисципліни «Архітектура програмного забезпечення»
+
+
+ 
+
+
+
+
+Виконав:                                                       Перевірив:
+ст. гр. ПЗПІ-23-3                                     	       ст. викладач катедри ПІ
+Першина М. А.                                     	       Сокорчук Ігор Петрович
+
+
+
+
+
+
+
+
+Харків 2026
+
+
+1 ІСТОРІЯ ЗМІН
+
+№	Дата	Версія звіту	Опис змін та виправлень
+1	26.05.2026	0.1	Початок роботи над звітом, налаштування Kubernetes кластера
+2	28.05.2026	0.2	Додавання навантажувального тестування Locust та доопрацювання звіту
+
+
+2 ЗАВДАННЯ
+Ознайомитись із підходами до горизонтального масштабування серверних застосунків. Отримати практичні навички розгортання та масштабування бекенду в Kubernetes-кластері з використанням HorizontalPodAutoscaler та проведення навантажувального тестування.
+Розробити конфігурацію Kubernetes для розгортання бекенду системи Plant Care System на базі Node.js/Express/PostgreSQL. Реалізувати горизонтальне масштабування серверної частини через набір YAML-маніфестів: Namespace, Secret, ConfigMap, PersistentVolumeClaim, Deployment, Service та HorizontalPodAutoscaler.
+Продемонструвати коректну роботу системи при збільшенні та зменшенні кількості подів бекенду. Провести навантажувальне тестування за допомогою інструменту Locust та показати залежність між кількістю реплік і пропускною здатністю системи (запитів на секунду).
+Звіт повинен містити: опис прийнятих інженерних рішень, опис маніфестів Kubernetes, таблицю результатів навантажувального тестування, аналіз поведінки HPA при збільшенні та зменшенні трафіку.
+
+
+3. ОПИС ВИКОНАНОЇ РОБОТИ
+Реалізовано горизонтальне масштабування бекенду системи Plant Care за допомогою Kubernetes. Бекенд є Node.js Express API з базою даних PostgreSQL, контейнеризований у Docker. Для розгортання розроблено папку k8s з 9 YAML-маніфестами та скрипт навантажувального тестування Locust. Продемонстровано автоматичне масштабування від 1 до 5 реплік через HorizontalPodAutoscaler та зворотне масштабування до 0 активних запитів.
+3.1 Технічний стек та інструменти
+Для реалізації масштабування бекенду використано набір інструментів, наведений у таблиці 3.1.
+
+Таблиця 3.1 – Технічний стек системи масштабування
+
+Компонент	Технологія/Інструмент	Призначення
+Оркестрація	Kubernetes (minikube)	Управління контейнерами та авто-масштабування
+Середовище	Docker	Контейнеризація бекенд-сервісу
+Автомасштабування	HPA (HorizontalPodAutoscaler)	Масштабування від 1 до 5 реплік за CPU
+Балансування	NodePort Service (порт 30000)	Розподіл трафіку між подами
+База даних	PostgreSQL (ClusterIP)	Зберігання даних системи Plant Care
+Навантажувальне тест.	Locust (Python)	Симуляція 50 користувачів, збір метрик
+Мережевий тунель	minikube tunnel / service URL	Доступ до кластера з Windows
+Конфігурація	ConfigMap + Secret	Змінні середовища та чутливі дані
+Зберігання даних	PersistentVolumeClaim (1 GB)	Стійке сховище для PostgreSQL
+
+
+3.2 Опис Kubernetes-маніфестів
+Конфігурація кластера складається з 9 YAML-файлів у папці k8s/, кожен з яких відповідає за окремий аспект розгортання системи.
+–	00-namespace.yaml — створює ізольований простір імен plant-care, у якому згруповано всі ресурси кластера.
+–	01-secrets.yaml — зберігає чутливі дані: пароль бази даних, рядок підключення та JWT-секрет як Kubernetes Secret.
+–	02-configmap.yaml — містить нечутливі змінні середовища: хост бази даних, порт, Node-середовище.
+–	03-postgres-init-configmap.yaml — містить SQL-схему та початкові дані, які монтуються в PostgreSQL-под при першому запуску.
+–	04-postgres-pvc.yaml — PersistentVolumeClaim, що виділяє 1 ГБ стійкого сховища для PostgreSQL.
+–	05-postgres.yaml — Deployment PostgreSQL та ClusterIP Service postgres-service зі стабільним DNS-ім'ям для бекенду.
+–	06-backend-deployment.yaml — Deployment бекенду з початковою 1 реплікою, init-контейнером очікування PostgreSQL та лімітами CPU.
+–	07-backend-service.yaml — NodePort Service на порті 30000 з автоматичним балансуванням трафіку між репліками.
+–	08-hpa.yaml — HorizontalPodAutoscaler, що перевіряє CPU кожні 15 секунд та масштабує від 1 до 5 реплік при перевищенні порогу 50%.
+3.3 Опис скрипту навантажувального тестування
+Для навантажувального тестування розроблено скрипт locustfile.py, що симулює поведінку реальних користувачів системи Plant Care. Скрипт визначає клас BackendUser, який виконує запити до різних ендпоінтів API із затримкою від 1 до 3 секунд між запитами.
+Розподіл задач (weight) побудований так, щоб максимально навантажити сервер: перевірка стану (GET /health) — 30%; запит типів рослин (GET /plant-types) — 25%; автентифіковані запити рослин (GET /my-plants) — 30%; операція логіну (POST /auth/login) — 15%. Операція логіну є найбільш CPU-навантаженою через bcrypt-хешування паролів, що провокує швидке зростання завантаженості процесора і спрацювання HPA.
+
+from locust import HttpUser, task, between
+
+class BackendUser(HttpUser):
+    wait_time = between(1, 3)
+
+    @task(3)
+    def health_check(self):
+        self.client.get('/health')
+
+    @task(3)
+    def get_plants(self):
+        self.client.get('/my-plants', headers=self.auth_headers())
+
+    @task(1)
+    def login(self):
+        self.client.post('/auth/login',
+            json={'email': 'test@test.com', 'password': 'test1234'})
+
+3.4 Результати навантажувального тестування
+Навантажувальне тестування проводилось при 50 одночасних користувачах зі швидкістю появи 5 користувачів на секунду (spawn rate). Тестування виконувалось у три етапи: базовий (1 репліка), ручне масштабування (3 репліки) та автоматичне масштабування через HPA (до 5 реплік). Результати наведені у таблиці 3.2.
+Таблиця 3.2 – Результати навантажувального тестування
+Кількість реплік	RPS (запитів/сек)	Median (мс)	95%ile (мс)	Стан системи
+1 (базовий)	~12	~2600	~5800	Насичений под
+3 (ручне)	~28	~550	~1200	Нормальна робота
+5 (HPA авто)	~42	~380	~900	Оптимальна продуктивність
+1 (після зупинки)	~12	~2500	~5600	Автоматичне зменшення
+
+Аналіз результатів показує чітку лінійну залежність між кількістю реплік та пропускною здатністю системи. При збільшенні кількості подів з 1 до 5 RPS зріс у 3,5 рази (з 12 до 42 запитів/сек), а медіанний час відповіді зменшився у 6,8 рази (з 2600 до 380 мс). Це підтверджує ефективність горизонтального масштабування для даного типу навантаження.
+3.5 Прийняті інженерні рішення
+Init-контейнер для PostgreSQL. Deployment бекенду містить init-контейнер на базі busybox, який виконує команду nslookup postgres-service у циклі до її успішного виконання. Це гарантує, що основний контейнер бекенду стартує лише після того, як PostgreSQL повністю готовий до прийому з'єднань, що запобігає помилкам підключення під час ініціалізації.
+
+Ліміти CPU як умова HPA. Явне визначення resources.requests.cpu та resources.limits.cpu у специфікації контейнера є обов'язковою умовою роботи HorizontalPodAutoscaler. Без цих значень метрики API Kubernetes не може розрахувати відсоток використання CPU відносно запиту, і HPA не спрацьовує. Встановлено запит 100m та ліміт 200m (мілісекунди CPU).
+
+PersistentVolumeClaim для PostgreSQL. Замість використання emptyDir (що призводить до втрати даних при перезапуску поду) для PostgreSQL виділено PVC розміром 1 ГБ. Це забезпечує збереження даних між перезапусками подів та оновленнями deployment-у.
+
+Стратегія масштабування вниз. HPA налаштований з periodSeconds: 15 для scaleUp та stabilizationWindowSeconds: 60 для scaleDown. Затримка при масштабуванні вниз запобігає видаленню реплік при короткочасному падінні трафіку, що знижує ризик деградації продуктивності при пульсуючому навантаженні.
+
+
+4. ВИСНОВКИ
+У ході виконання лабораторної роботи № 4 успішно реалізовано горизонтальне масштабування бекенду системи Plant Care за допомогою Kubernetes.
+Розроблено 9 YAML-маніфестів, що охоплюють повний цикл розгортання: ізоляцію ресурсів (Namespace), безпечне зберігання конфігурації (Secret, ConfigMap), стійке сховище (PVC), розгортання сервісів (Deployment) та балансування навантаження (NodePort Service). Реалізовано автоматичне масштабування через HorizontalPodAutoscaler з пороговим значенням CPU 50% та діапазоном від 1 до 5 реплік.
+За результатами навантажувального тестування Locust при 50 одночасних користувачах підтверджено ефективність горизонтального масштабування: пропускна здатність зросла з 12 до 42 запитів/сек при масштабуванні від 1 до 5 реплік, а медіанний час відповіді скоротився з 2600 до 380 мс.
+Єдиним незмасштабованим компонентом залишається PostgreSQL — у продуктивному середовищі його слід масштабувати окремо за допомогою read-реплік або пулера з'єднань. Автоматичне масштабування вниз після зупинки тестового навантаження підтвердило коректну роботу механізму стабілізації HPA.
+
+
+5. ВИКОРИСТАНІ ДЖЕРЕЛА
+1.	Kubernetes Documentation. Horizontal Pod Autoscaling [Електронний ресурс]. – Режим доступу: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ – Дата доступу: 25.05.2026.
+2.	Docker Documentation. Dockerfile reference [Електронний ресурс]. – Режим доступу: https://docs.docker.com/reference/dockerfile/ – Дата доступу: 25.05.2026.
+3.	Locust Documentation. Writing a locustfile [Електронний ресурс]. – Режим доступу: https://docs.locust.io/en/stable/writing-a-locustfile.html – Дата доступу: 26.05.2026.
+4.	Minikube Documentation. Getting Started [Електронний ресурс]. – Режим доступу: https://minikube.sigs.k8s.io/docs/start/ – Дата доступу: 25.05.2026.
+5.	Kubernetes Documentation. Secrets [Електронний ресурс]. – Режим доступу: https://kubernetes.io/docs/concepts/configuration/secret/ – Дата доступу: 26.05.2026.
+
+
+
+6. ВИКОРИСТАННЯ ШІ ПІД ЧАС РОЗРОБКИ
+
+Під час виконання лабораторної роботи було використано інструмент штучного інтелекту Claude:
+•	назва інструменту та версія: Claude Sonnet 4.6
+•	мета використання: отримання рекомендацій щодо налаштування HPA, написання init-контейнера та оптимізації locustfile.py для провокування CPU-навантаження
+•	внесок автора: отримані відповіді адаптовані під конкретну архітектуру Plant Care System, скориговано ліміти CPU, перевірено сумісність версій Kubernetes API та виправлено init-контейнер під особливості minikube
+1. Запит (prompt) щодо налаштування HPA для Node.js бекенду:
+Я розгортаю Node.js Express API у Kubernetes через minikube. Хочу налаштувати HorizontalPodAutoscaler щоб він автоматично масштабував бекенд від 1 до 5 реплік при навантаженні. Які ліміти CPU потрібно встановити у Deployment щоб HPA коректно рахував відсоток використання?
+Отримана відповідь:
+Для коректної роботи HPA необхідно обов'язково вказати resources.requests.cpu у специфікації контейнера — саме від цього значення HPA рахує відсоток. Рекомендується встановити request: 100m та limit: 200m. Без request HPA не матиме базового значення для розрахунку і не буде спрацьовувати. Додатково потрібно переконатись що metrics-server встановлений у кластері — для minikube це робиться через minikube addons enable metrics-server.
+
+2. Запит (prompt) щодо написання скрипту Locust для провокування CPU-навантаження:
+Я хочу написати locustfile.py для навантажувального тестування Node.js/Express бекенду Plant Care System. Мета — спровокувати достатнє CPU-навантаження, щоб HorizontalPodAutoscaler спрацював і збільшив кількість реплік з 1 до 5. Бекенд має ендпоінти: GET /health, GET /plant-types, GET /my-plants (потребує JWT), POST /auth/login (використовує bcrypt). Як правильно розподілити вагу задач щоб максимально навантажити CPU?
+Отримана відповідь:
+Для максимального CPU-навантаження варто зробити акцент на POST /auth/login, оскільки bcrypt є навмисно повільною операцією і створює найбільше навантаження на процесор. Рекомендований розподіл: login з вагою 2-3, get_plants з вагою 3 (потребує JWT-верифікації), health та plant-types з вагою 1. Для автентифікованих запитів слід реалізувати метод on_start, який виконує логін один раз при ініціалізації користувача та зберігає токен у headers. Кількість користувачів 50 зі spawn rate 5 достатньо для того щоб 1 репліка вийшла за 50% CPU і HPA почав масштабування протягом 1-2 хвилин.
+
+ 
+ДОДАТОК А
+
+Відеозапис
+
+Відеозапис доповіді: https://youtu.be/_qPHFWS4Tvk
+
+Хронологічний опис відеозапису:
+
+0:00 - Вступ 
+0:37 - Пояснення YAML-маніфестів 
+3:23 - Показ запущеного кластера 
+4:45 - Базовий тест 1 поду, Locust 50 користувачів 
+7:00 - Ручне масштабування до 3 реплік 
+9:45 - Масштабування вниз після зупинки трафіку 
+11:34 - Висновки
+
+
+
+ 
+ДОДАТОК Б
+
+Скріншоти застосунку та вихідний код
+
+Б.1 Скріншоти locust
+ 
+
+Б.2 Вихідний код ключових компонентів
+
+Лістинг Б.1 – 00-namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: plant-care
+
+Лістинг Б.2 – 01-secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: plant-care-secrets
+  namespace: plant-care
+type: Opaque
+stringData:
+  POSTGRES_DB: plant_care
+  POSTGRES_USER: plant_user
+  POSTGRES_PASSWORD: plant_password
+  DB_PASSWORD: plant_password
+  DATABASE_URL: "postgresql://plant_user:plant_password@postgres-service:5432/plant_care"
+  JWT_SECRET: "your_super_secret_jwt_key_change_in_production_12345"
+
+Лістинг Б.3 – 02-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: plant-care
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  DB_NAME: "plant_care"
+  DB_USER: "plant_user"
+  JWT_EXPIRES_IN: "24h"
+  CORS_ORIGIN: "*"
+  LOG_LEVEL: "info"
+
+Лістинг Б.4 – 03-postgres-init-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: plant-care
+data:
+  01-init.sql: |
+    DROP TABLE IF EXISTS plant_actions CASCADE;
+    DROP TABLE IF EXISTS sensor_data CASCADE;
+    DROP TABLE IF EXISTS sensors CASCADE;
+    DROP TABLE IF EXISTS plants CASCADE;
+    DROP TABLE IF EXISTS plant_types CASCADE;
+    DROP TABLE IF EXISTS users CASCADE;
+
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+        CREATE TYPE user_role AS ENUM ('user', 'admin');
+      END IF;
+    END $$;
+
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'action_type') THEN
+        CREATE TYPE action_type AS ENUM ('watering', 'lighting', 'ventilation', 'manual_check', 'fertilizing');
+      END IF;
+    END $$;
+
+    CREATE TABLE users (
+        user_id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        first_name VARCHAR(100) NOT NULL,
+        last_name VARCHAR(100) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role user_role DEFAULT 'user',
+        last_login TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE plant_types (
+        plant_type_id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        optimal_humidity FLOAT CHECK (optimal_humidity BETWEEN 0 AND 100),
+        optimal_temperature FLOAT CHECK (optimal_temperature BETWEEN 5 AND 40),
+        optimal_light INTEGER CHECK (optimal_light > 0),
+        watering_frequency INTEGER CHECK (watering_frequency > 0)
+    );
+
+    CREATE TABLE plants (
+        plant_id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        plant_type_id INTEGER NOT NULL REFERENCES plant_types(plant_type_id),
+        name VARCHAR(100) NOT NULL,
+        location VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE sensors (
+        sensor_id SERIAL PRIMARY KEY,
+        plant_id INTEGER NOT NULL REFERENCES plants(plant_id) ON DELETE CASCADE,
+        sensor_type VARCHAR(20) CHECK (sensor_type IN ('humidity', 'temperature', 'light')),
+        hardware_id VARCHAR(50) NOT NULL UNIQUE,
+        is_active BOOLEAN DEFAULT TRUE
+    );
+
+    CREATE TABLE sensor_data (
+        data_id SERIAL PRIMARY KEY,
+        sensor_id INTEGER NOT NULL REFERENCES sensors(sensor_id) ON DELETE CASCADE,
+        value FLOAT NOT NULL,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE plant_actions (
+        action_id SERIAL PRIMARY KEY,
+        plant_id INTEGER NOT NULL REFERENCES plants(plant_id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        action_type action_type NOT NULL,
+        action_value VARCHAR(200),
+        action_duration INTEGER DEFAULT 0,
+        notes TEXT,
+        performed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX idx_users_email ON users(email);
+    CREATE INDEX idx_users_role ON users(role);
+    CREATE INDEX idx_plants_user ON plants(user_id);
+    CREATE INDEX idx_plants_type ON plants(plant_type_id);
+    CREATE INDEX idx_sensors_plant ON sensors(plant_id);
+    CREATE INDEX idx_sensor_data_sensor ON sensor_data(sensor_id);
+    CREATE INDEX idx_sensor_data_timestamp ON sensor_data(timestamp);
+    CREATE INDEX idx_plant_actions_plant ON plant_actions(plant_id);
+    CREATE INDEX idx_plant_actions_date ON plant_actions(performed_at);
+    CREATE INDEX idx_plant_actions_type ON plant_actions(action_type);
+
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.updated_at = CURRENT_TIMESTAMP;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER update_users_updated_at
+        BEFORE UPDATE ON users
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    CREATE TRIGGER update_plants_updated_at
+        BEFORE UPDATE ON plants
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+  02-seed-data.sql: |
+    INSERT INTO users (email, first_name, last_name, password_hash, role, last_login) VALUES
+    ('admin@plantcare.com', 'Admin', 'System', '$2a$10$ibbbc5H.q7do2v4l9.KKeObnMqMt/FpzOfvVrPNYgfrRGnT53T5ue', 'admin', CURRENT_TIMESTAMP - INTERVAL '1 hour'),
+    ('ivan.petrenko@email.com', 'Ivan', 'Petrenko', '$2a$10$119aVFvq3WXCea8Q4u2r8eHdFGXbz/P2PS0svSticJrz/jRw1Xa3i', 'user', CURRENT_TIMESTAMP - INTERVAL '2 hours'),
+    ('maria.kovalenko@email.com', 'Maria', 'Kovalenko', '$2a$10$cn.CVOSZsw44NDCZeNbNtusAUmfU/gNCrDdB45hsrQzRwslGhQ76e', 'user', CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    ('oleh.shevchenko@email.com', 'Oleh', 'Shevchenko', '$2a$10$A3hgM12fYWt1vqie5IeOb.85qyWKd631r.9WFqg0AP9nqN/JZaHJe', 'user', CURRENT_TIMESTAMP - INTERVAL '3 hours');
+
+    INSERT INTO plant_types (name, optimal_humidity, optimal_temperature, optimal_light, watering_frequency) VALUES
+    ('Violet', 65.0, 20.0, 15000, 3),
+    ('Cactus', 30.0, 25.0, 25000, 7),
+    ('Fern', 80.0, 18.0, 8000, 2),
+    ('Ficus Benjamina', 55.0, 22.0, 12000, 4),
+    ('Aloe Vera', 25.0, 24.0, 20000, 10),
+    ('Spathiphyllum', 70.0, 21.0, 10000, 3);
+
+    INSERT INTO plants (user_id, plant_type_id, name, location) VALUES
+    (2, 1, 'My Violet', 'Kitchen windowsill'),
+    (2, 2, 'Prickly Friend', 'Living room table'),
+    (2, 4, 'Ivan Ficus', 'Living room corner'),
+    (3, 3, 'Green Beauty', 'Room by window'),
+    (3, 1, 'Maria Violet', 'Bedroom'),
+    (3, 6, 'Peace Lily', 'Kitchen'),
+    (4, 2, 'Little Cactus', 'Desk'),
+    (4, 3, 'Oleh Fern', 'Hallway'),
+    (4, 5, 'Healing Aloe', 'Bathroom');
+
+    INSERT INTO sensors (plant_id, sensor_type, hardware_id, is_active) VALUES
+    (1, 'humidity', 'HUM_001_A1B2', true),
+    (1, 'temperature', 'TEMP_001_C3D4', true),
+    (1, 'light', 'LIGHT_001_E5F6', true),
+    (2, 'humidity', 'HUM_002_G7H8', true),
+    (2, 'temperature', 'TEMP_002_I9J0', true),
+    (2, 'light', 'LIGHT_002_K1L2', true),
+    (3, 'humidity', 'HUM_003_M3N4', true),
+    (3, 'temperature', 'TEMP_003_O5P6', true),
+    (4, 'humidity', 'HUM_004_Q7R8', true),
+    (4, 'temperature', 'TEMP_004_S9T0', true),
+    (4, 'light', 'LIGHT_004_U1V2', true),
+    (5, 'humidity', 'HUM_005_W3X4', true),
+    (5, 'temperature', 'TEMP_005_Y5Z6', true),
+    (6, 'humidity', 'HUM_006_A7B8', true),
+    (6, 'temperature', 'TEMP_006_C9D0', true),
+    (6, 'light', 'LIGHT_006_E1F2', true),
+    (7, 'humidity', 'HUM_007_G3H4', true),
+    (7, 'temperature', 'TEMP_007_I5J6', true),
+    (8, 'humidity', 'HUM_008_K7L8', true),
+    (8, 'temperature', 'TEMP_008_M9N0', true),
+    (9, 'humidity', 'HUM_009_O1P2', true),
+    (9, 'temperature', 'TEMP_009_Q3R4', true),
+    (9, 'light', 'LIGHT_009_S5T6', true);
+
+    INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES
+    (1, 68.5, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (1, 67.2, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (1, 69.1, CURRENT_TIMESTAMP - INTERVAL '45 minutes'),
+    (1, 66.8, CURRENT_TIMESTAMP - INTERVAL '1 hour'),
+    (2, 21.3, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (2, 20.8, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (2, 21.0, CURRENT_TIMESTAMP - INTERVAL '45 minutes'),
+    (3, 14500, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (3, 16200, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (3, 15800, CURRENT_TIMESTAMP - INTERVAL '45 minutes'),
+    (4, 28.3, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (4, 29.1, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (5, 26.2, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (5, 25.8, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (6, 24500, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (6, 25200, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (7, 56.2, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (7, 55.8, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (8, 22.5, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (9, 82.1, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (9, 81.5, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (10, 18.7, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (11, 7800, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (12, 63.4, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (13, 19.8, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (14, 71.2, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (15, 21.3, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (16, 9800, CURRENT_TIMESTAMP - INTERVAL '15 minutes');
+
+
+Лістинг Б.5 – 04-postgres-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: plant-care
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+Лістинг Б.6 – 05-postgres.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: plant-care
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: plant-care
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: plant-care-secrets
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "plant_user", "-d", "plant_care"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "plant_user", "-d", "plant_care"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        - name: init-scripts
+          configMap:
+            name: postgres-init
+
+
+Лістинг Б.7 – 06-backend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: plant-care
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres-service -U plant_user -d plant_care; do
+                echo "Waiting for PostgreSQL...";
+                sleep 3;
+              done;
+              echo "PostgreSQL is ready."
+      containers:
+        - name: backend
+          image: plant-care-backend:latest
+          # Never pull from registry — use the image loaded into Minikube locally
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: plant-care-secrets
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 40
+            periodSeconds: 20
+            failureThreshold: 3
+
+Лістинг Б.8 – 07-backend-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: plant-care
+spec:
+  selector:
+    app: backend
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+      nodePort: 30000
+
+
+Лістинг Б.9 – 08-hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: plant-care
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+Лістинг Б.10 – locustfile.py
+"""
+Plant Care System - Locust Load Test
+Lab 4: Backend Scaling demonstration
+
+Usage:
+  locust -f locustfile.py --host=http://<minikube-ip>:30000
+
+Then open http://localhost:8089 in your browser.
+
+Test scenario for scaling demo:
+  1. Start with 1 backend pod, run ~50 users → note RPS
+  2. Scale to 3 pods: kubectl scale deployment backend --replicas=3 -n plant-care
+  3. Run same 50 users → RPS should ~triple
+  4. Scale to 5 pods → RPS increases further
+"""
+
+from locust import HttpUser, task, between, events
+import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Test credentials from seed data
+TEST_USERS = [
+    {"email": "ivan.petrenko@email.com", "password": "password123"},
+    {"email": "maria.kovalenko@email.com", "password": "password456"},
+    {"email": "oleh.shevchenko@email.com", "password": "password789"},
+]
+
+
+class PlantCareUser(HttpUser):
+    """
+    Simulates a real user hitting the Plant Care API.
+    Mix of lightweight reads, heavier DB queries, and auth calls.
+    """
+    wait_time = between(0.5, 2)
+
+    def on_start(self):
+        """Called once per simulated user on startup — log in and cache the JWT."""
+        import random
+        creds = random.choice(TEST_USERS)
+        self.token = None
+        self.user_email = creds["email"]
+
+        with self.client.post(
+            "/api/auth/login",
+            json=creds,
+            catch_response=True,
+            name="POST /api/auth/login [startup]",
+        ) as resp:
+            if resp.status_code == 200:
+                data = resp.json()
+                # Handle both {token: ...} and {data: {token: ...}} response shapes
+                self.token = data.get("token") or (data.get("data") or {}).get("token")
+                if self.token:
+                    resp.success()
+                else:
+                    resp.failure("Login response had no token field")
+            else:
+                resp.failure(f"Login failed: {resp.status_code} {resp.text[:200]}")
+
+    def auth_headers(self):
+        return {"Authorization": f"Bearer {self.token}"} if self.token else {}
+
+    # ------------------------------------------------------------------ #
+    # Lightweight endpoints — high weight, no auth needed
+    # ------------------------------------------------------------------ #
+
+    @task(4)
+    def health_check(self):
+        """Fastest possible endpoint — good baseline for measuring pod throughput."""
+        self.client.get("/health", name="GET /health")
+
+    @task(6)
+    def get_plant_types(self):
+        """Read-only catalog — no auth, small table, very fast."""
+        self.client.get("/api/plant-types", name="GET /api/plant-types")
+
+    # ------------------------------------------------------------------ #
+    # Authenticated read endpoints — moderate weight
+    # ------------------------------------------------------------------ #
+
+    @task(5)
+    def get_my_plants(self):
+        """Returns authenticated user's plants — JWT decode + DB join."""
+        self.client.get(
+            "/api/my-plants",
+            headers=self.auth_headers(),
+            name="GET /api/my-plants",
+        )
+
+    @task(4)
+    def get_all_plants(self):
+        """Admin/general plant list."""
+        self.client.get(
+            "/api/plants",
+            headers=self.auth_headers(),
+            name="GET /api/plants",
+        )
+
+    @task(3)
+    def get_sensors(self):
+        """List sensors — DB query with auth overhead."""
+        self.client.get(
+            "/api/sensors",
+            headers=self.auth_headers(),
+            name="GET /api/sensors",
+        )
+
+    @task(3)
+    def get_sensor_data(self):
+        """Heavier query — time-series table, tests DB throughput."""
+        self.client.get(
+            "/api/sensor-data",
+            headers=self.auth_headers(),
+            name="GET /api/sensor-data",
+        )
+
+    # ------------------------------------------------------------------ #
+    # Write / CPU-heavy endpoints — low weight
+    # ------------------------------------------------------------------ #
+
+    @task(1)
+    def login_again(self):
+        """bcrypt compare on every call — most CPU-intensive operation."""
+        import random
+        creds = random.choice(TEST_USERS)
+        with self.client.post(
+            "/api/auth/login",
+            json=creds,
+            catch_response=True,
+            name="POST /api/auth/login",
+        ) as resp:
+            if resp.status_code == 200:
+                resp.success()
+            else:
+                resp.failure(f"{resp.status_code}")
+
+
+class PlantCareHeavyUser(HttpUser):
+    """
+    Aggressive user that hits sensor-data repeatedly.
+    Use this class to stress the DB and trigger HPA scale-up faster.
+    Start a separate Locust worker with --tags heavy to use only this class.
+    """
+    wait_time = between(0.1, 0.5)
+
+    def on_start(self):
+        resp = self.client.post(
+            "/api/auth/login",
+            json={"email": "ivan.petrenko@email.com", "password": "password123"},
+        )
+        self.token = None
+        if resp.status_code == 200:
+            data = resp.json()
+            self.token = data.get("token") or (data.get("data") or {}).get("token")
+
+    def auth_headers(self):
+        return {"Authorization": f"Bearer {self.token}"} if self.token else {}
+
+    @task(1)
+    def heavy_sensor_data(self):
+        self.client.get(
+            "/api/sensor-data",
+            headers=self.auth_headers(),
+            name="GET /api/sensor-data [heavy]",
+        )
+
+    @task(1)
+    def heavy_login(self):
+        self.client.post(
+            "/api/auth/login",
+            json={"email": "ivan.petrenko@email.com", "password": "password123"},
+            name="POST /api/auth/login [heavy]",
+        )

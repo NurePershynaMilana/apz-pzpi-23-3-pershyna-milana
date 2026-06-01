@@ -1,0 +1,191 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: plant-care
+data:
+  01-init.sql: |
+    DROP TABLE IF EXISTS plant_actions CASCADE;
+    DROP TABLE IF EXISTS sensor_data CASCADE;
+    DROP TABLE IF EXISTS sensors CASCADE;
+    DROP TABLE IF EXISTS plants CASCADE;
+    DROP TABLE IF EXISTS plant_types CASCADE;
+    DROP TABLE IF EXISTS users CASCADE;
+
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+        CREATE TYPE user_role AS ENUM ('user', 'admin');
+      END IF;
+    END $$;
+
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'action_type') THEN
+        CREATE TYPE action_type AS ENUM ('watering', 'lighting', 'ventilation', 'manual_check', 'fertilizing');
+      END IF;
+    END $$;
+
+    CREATE TABLE users (
+        user_id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        first_name VARCHAR(100) NOT NULL,
+        last_name VARCHAR(100) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role user_role DEFAULT 'user',
+        last_login TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE plant_types (
+        plant_type_id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        optimal_humidity FLOAT CHECK (optimal_humidity BETWEEN 0 AND 100),
+        optimal_temperature FLOAT CHECK (optimal_temperature BETWEEN 5 AND 40),
+        optimal_light INTEGER CHECK (optimal_light > 0),
+        watering_frequency INTEGER CHECK (watering_frequency > 0)
+    );
+
+    CREATE TABLE plants (
+        plant_id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        plant_type_id INTEGER NOT NULL REFERENCES plant_types(plant_type_id),
+        name VARCHAR(100) NOT NULL,
+        location VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE sensors (
+        sensor_id SERIAL PRIMARY KEY,
+        plant_id INTEGER NOT NULL REFERENCES plants(plant_id) ON DELETE CASCADE,
+        sensor_type VARCHAR(20) CHECK (sensor_type IN ('humidity', 'temperature', 'light')),
+        hardware_id VARCHAR(50) NOT NULL UNIQUE,
+        is_active BOOLEAN DEFAULT TRUE
+    );
+
+    CREATE TABLE sensor_data (
+        data_id SERIAL PRIMARY KEY,
+        sensor_id INTEGER NOT NULL REFERENCES sensors(sensor_id) ON DELETE CASCADE,
+        value FLOAT NOT NULL,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE plant_actions (
+        action_id SERIAL PRIMARY KEY,
+        plant_id INTEGER NOT NULL REFERENCES plants(plant_id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        action_type action_type NOT NULL,
+        action_value VARCHAR(200),
+        action_duration INTEGER DEFAULT 0,
+        notes TEXT,
+        performed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX idx_users_email ON users(email);
+    CREATE INDEX idx_users_role ON users(role);
+    CREATE INDEX idx_plants_user ON plants(user_id);
+    CREATE INDEX idx_plants_type ON plants(plant_type_id);
+    CREATE INDEX idx_sensors_plant ON sensors(plant_id);
+    CREATE INDEX idx_sensor_data_sensor ON sensor_data(sensor_id);
+    CREATE INDEX idx_sensor_data_timestamp ON sensor_data(timestamp);
+    CREATE INDEX idx_plant_actions_plant ON plant_actions(plant_id);
+    CREATE INDEX idx_plant_actions_date ON plant_actions(performed_at);
+    CREATE INDEX idx_plant_actions_type ON plant_actions(action_type);
+
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.updated_at = CURRENT_TIMESTAMP;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER update_users_updated_at
+        BEFORE UPDATE ON users
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+    CREATE TRIGGER update_plants_updated_at
+        BEFORE UPDATE ON plants
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+  02-seed-data.sql: |
+    INSERT INTO users (email, first_name, last_name, password_hash, role, last_login) VALUES
+    ('admin@plantcare.com', 'Admin', 'System', '$2a$10$ibbbc5H.q7do2v4l9.KKeObnMqMt/FpzOfvVrPNYgfrRGnT53T5ue', 'admin', CURRENT_TIMESTAMP - INTERVAL '1 hour'),
+    ('ivan.petrenko@email.com', 'Ivan', 'Petrenko', '$2a$10$119aVFvq3WXCea8Q4u2r8eHdFGXbz/P2PS0svSticJrz/jRw1Xa3i', 'user', CURRENT_TIMESTAMP - INTERVAL '2 hours'),
+    ('maria.kovalenko@email.com', 'Maria', 'Kovalenko', '$2a$10$cn.CVOSZsw44NDCZeNbNtusAUmfU/gNCrDdB45hsrQzRwslGhQ76e', 'user', CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    ('oleh.shevchenko@email.com', 'Oleh', 'Shevchenko', '$2a$10$A3hgM12fYWt1vqie5IeOb.85qyWKd631r.9WFqg0AP9nqN/JZaHJe', 'user', CURRENT_TIMESTAMP - INTERVAL '3 hours');
+
+    INSERT INTO plant_types (name, optimal_humidity, optimal_temperature, optimal_light, watering_frequency) VALUES
+    ('Violet', 65.0, 20.0, 15000, 3),
+    ('Cactus', 30.0, 25.0, 25000, 7),
+    ('Fern', 80.0, 18.0, 8000, 2),
+    ('Ficus Benjamina', 55.0, 22.0, 12000, 4),
+    ('Aloe Vera', 25.0, 24.0, 20000, 10),
+    ('Spathiphyllum', 70.0, 21.0, 10000, 3);
+
+    INSERT INTO plants (user_id, plant_type_id, name, location) VALUES
+    (2, 1, 'My Violet', 'Kitchen windowsill'),
+    (2, 2, 'Prickly Friend', 'Living room table'),
+    (2, 4, 'Ivan Ficus', 'Living room corner'),
+    (3, 3, 'Green Beauty', 'Room by window'),
+    (3, 1, 'Maria Violet', 'Bedroom'),
+    (3, 6, 'Peace Lily', 'Kitchen'),
+    (4, 2, 'Little Cactus', 'Desk'),
+    (4, 3, 'Oleh Fern', 'Hallway'),
+    (4, 5, 'Healing Aloe', 'Bathroom');
+
+    INSERT INTO sensors (plant_id, sensor_type, hardware_id, is_active) VALUES
+    (1, 'humidity', 'HUM_001_A1B2', true),
+    (1, 'temperature', 'TEMP_001_C3D4', true),
+    (1, 'light', 'LIGHT_001_E5F6', true),
+    (2, 'humidity', 'HUM_002_G7H8', true),
+    (2, 'temperature', 'TEMP_002_I9J0', true),
+    (2, 'light', 'LIGHT_002_K1L2', true),
+    (3, 'humidity', 'HUM_003_M3N4', true),
+    (3, 'temperature', 'TEMP_003_O5P6', true),
+    (4, 'humidity', 'HUM_004_Q7R8', true),
+    (4, 'temperature', 'TEMP_004_S9T0', true),
+    (4, 'light', 'LIGHT_004_U1V2', true),
+    (5, 'humidity', 'HUM_005_W3X4', true),
+    (5, 'temperature', 'TEMP_005_Y5Z6', true),
+    (6, 'humidity', 'HUM_006_A7B8', true),
+    (6, 'temperature', 'TEMP_006_C9D0', true),
+    (6, 'light', 'LIGHT_006_E1F2', true),
+    (7, 'humidity', 'HUM_007_G3H4', true),
+    (7, 'temperature', 'TEMP_007_I5J6', true),
+    (8, 'humidity', 'HUM_008_K7L8', true),
+    (8, 'temperature', 'TEMP_008_M9N0', true),
+    (9, 'humidity', 'HUM_009_O1P2', true),
+    (9, 'temperature', 'TEMP_009_Q3R4', true),
+    (9, 'light', 'LIGHT_009_S5T6', true);
+
+    INSERT INTO sensor_data (sensor_id, value, timestamp) VALUES
+    (1, 68.5, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (1, 67.2, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (1, 69.1, CURRENT_TIMESTAMP - INTERVAL '45 minutes'),
+    (1, 66.8, CURRENT_TIMESTAMP - INTERVAL '1 hour'),
+    (2, 21.3, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (2, 20.8, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (2, 21.0, CURRENT_TIMESTAMP - INTERVAL '45 minutes'),
+    (3, 14500, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (3, 16200, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (3, 15800, CURRENT_TIMESTAMP - INTERVAL '45 minutes'),
+    (4, 28.3, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (4, 29.1, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (5, 26.2, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (5, 25.8, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (6, 24500, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (6, 25200, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (7, 56.2, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (7, 55.8, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (8, 22.5, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (9, 82.1, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (9, 81.5, CURRENT_TIMESTAMP - INTERVAL '30 minutes'),
+    (10, 18.7, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (11, 7800, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (12, 63.4, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (13, 19.8, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (14, 71.2, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (15, 21.3, CURRENT_TIMESTAMP - INTERVAL '15 minutes'),
+    (16, 9800, CURRENT_TIMESTAMP - INTERVAL '15 minutes');

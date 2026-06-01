@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: plant-care
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  DB_NAME: "plant_care"
+  DB_USER: "plant_user"
+  JWT_EXPIRES_IN: "24h"
+  CORS_ORIGIN: "*"
+  LOG_LEVEL: "info"
